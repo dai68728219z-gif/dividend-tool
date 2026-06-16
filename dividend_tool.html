@@ -87,9 +87,9 @@ th.has-filter .fd-icon { opacity:1; }
     <span class="navbar-brand text-white fw-bold fs-5">📈 配当投資 意思決定ツール</span>
     <div class="d-flex gap-2 align-items-center ms-auto">
       <span class="text-white-50 small d-none d-md-inline" id="lastUpdated"></span>
-      <button class="btn btn-outline-light btn-sm" onclick="exportRanks()" title="評価ランクをJSONで保存">💾 ランク保存</button>
-      <label class="btn btn-outline-warning btn-sm mb-0" title="評価ランクJSONを読み込む">
-        📂 ランク読込<input type="file" accept=".json" style="display:none" onchange="importRanks(this)">
+      <button class="btn btn-outline-light btn-sm" onclick="exportAll()" title="全データをJSONで保存（スマホ同期用）">💾 データ保存</button>
+      <label class="btn btn-outline-warning btn-sm mb-0" title="JSONを読み込む（スマホ同期用）">
+        📂 データ読込<input type="file" accept=".json" style="display:none" onchange="importAll(this)">
       </label>
     </div>
   </div>
@@ -1761,30 +1761,44 @@ function renderAll() { renderDash(); renderStocks(); renderPortfolio(); renderBu
 // ════════════════════════════════════════
 //  ランク エクスポート / インポート
 // ════════════════════════════════════════
-function exportRanks() {
-  const data = JSON.stringify(ST.ranks, null, 2);
-  const blob = new Blob([data], {type:'application/json'});
+function exportAll() {
+  const payload = {
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    stocks:    ST.stocks,
+    portfolio: ST.portfolio,
+    ranks:     ST.ranks,
+  };
+  const blob = new Blob([JSON.stringify(payload)], {type:'application/json'});
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   const date = new Date().toISOString().slice(0,10);
-  a.href = url; a.download = `ranks_${date}.json`;
+  a.href = url; a.download = `dividend_data_${date}.json`;
   a.click(); URL.revokeObjectURL(url);
 }
 
-function importRanks(input) {
+function importAll(input) {
   const file = input.files[0];
   if (!file) return;
   const reader = new FileReader();
   reader.onload = e => {
     try {
-      const imported = JSON.parse(e.target.result);
-      if (typeof imported !== 'object') throw new Error('invalid');
-      const count = Object.keys(imported).length;
-      if (!confirm(`${count}件のランクデータを読み込みます。\n既存データにマージ（上書き）します。`)) return;
-      ST.ranks = {...ST.ranks, ...imported};
+      const d = JSON.parse(e.target.result);
+      const stocks = d.stocks || d; // v1互換（ranksのみのファイルにも対応）
+      if (d.version === 2) {
+        if (!confirm(`銘柄${d.stocks?.length||0}件・ポートフォリオ${d.portfolio?.length||0}件・ランク${Object.keys(d.ranks||{}).length}件を読み込みます。`)) return;
+        if (d.stocks?.length)    ST.stocks    = d.stocks;
+        if (d.portfolio?.length) ST.portfolio = d.portfolio;
+        if (d.ranks)             ST.ranks     = {...ST.ranks, ...d.ranks};
+      } else {
+        // 旧形式（ランクのみ）
+        const count = Object.keys(d).length;
+        if (!confirm(`${count}件のランクデータを読み込みます。`)) return;
+        ST.ranks = {...ST.ranks, ...d};
+      }
       ST.save();
       renderAll();
-      alert(`✅ ${count}件のランクを読み込みました`);
+      alert('✅ データを読み込みました');
     } catch(err) {
       alert('ファイルの読み込みに失敗しました');
     }
