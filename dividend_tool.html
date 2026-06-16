@@ -1,0 +1,1971 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>配当投資 意思決定ツール</title>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+body { background:#f0f2f5; font-family:'Yu Gothic UI',sans-serif; font-size:13px; }
+.navbar { background:linear-gradient(135deg,#1a3a5c,#2e75b6); }
+.card { border:none; box-shadow:0 2px 8px rgba(0,0,0,.08); border-radius:10px; }
+.nav-tabs .nav-link { color:#495057; font-weight:500; }
+.nav-tabs .nav-link.active { font-weight:700; color:#2e75b6; border-bottom:3px solid #2e75b6; }
+.score-pill { display:inline-block; min-width:42px; text-align:center;
+              padding:2px 8px; border-radius:20px; font-weight:700; }
+.rank-badge { font-size:1.1em; font-weight:700; padding:1px 6px; border-radius:4px; }
+.rank-★ { background:#fff3cd; color:#b8860b; }
+.rank-● { background:#cce5ff; color:#004085; }
+.rank-優待 { background:#e8d5ff; color:#5b2c8d; }
+.rank-〇 { background:#d4edda; color:#155724; }
+.rank-× { background:#f8d7da; color:#721c24; }
+.buy-flag   { background:#27ae60; color:#fff; padding:1px 7px; border-radius:10px; font-size:.85em; font-weight:600; }
+.watch-flag { background:#f39c12; color:#fff; padding:1px 7px; border-radius:10px; font-size:.85em; font-weight:600; }
+.acct-nisa1  { background:#dce6f1; color:#1F3864; padding:0 5px; border-radius:3px; font-size:.85em; }
+.acct-nisa2  { background:#fce4d6; color:#843c0c; padding:0 5px; border-radius:3px; font-size:.85em; }
+.acct-tokutei{ background:#e2efda; color:#375623; padding:0 5px; border-radius:3px; font-size:.85em; }
+.acct-us     { background:#ededed; color:#444;    padding:0 5px; border-radius:3px; font-size:.85em; }
+.table th { white-space:nowrap; font-size:12px; }
+.table td { vertical-align:middle; }
+th.sortable { cursor:pointer; user-select:none; }
+th.sortable:hover { background:rgba(255,255,255,.15); }
+th.sort-asc::after  { content:' ▲'; }
+th.sort-desc::after { content:' ▼'; }
+.score-bar-wrap { display:inline-block; width:48px; height:6px;
+                  background:#e0e0e0; border-radius:3px; vertical-align:middle; }
+.score-bar-fill { height:100%; border-radius:3px; }
+.sticky-top-2 { position:sticky; top:0; z-index:5; }
+.jq-panel { background:#f8fffe; border:1px solid #bee5eb; border-radius:8px; padding:12px; }
+.report-panel { background:#fffaf0; border:1px solid #ffd591; border-radius:8px; padding:12px; }
+/* ── フィルタードロップダウン ── */
+th.sortable { cursor:pointer; user-select:none; white-space:nowrap; }
+th.sortable:hover { background:rgba(255,255,255,.12); }
+th.sort-asc::after  { content:' ▲'; font-size:.75em; opacity:.8; }
+th.sort-desc::after { content:' ▼'; font-size:.75em; opacity:.8; }
+th.has-filter { background:rgba(255,193,7,.22) !important; }
+.fd-icon { font-size:.7em; opacity:.55; margin-left:3px; vertical-align:middle; }
+th.sortable:hover .fd-icon,
+th.has-filter .fd-icon { opacity:1; }
+#fd-panel {
+  display:none; position:fixed; z-index:9999;
+  background:#fff; border:1px solid #ced4da; border-radius:8px;
+  box-shadow:0 6px 20px rgba(0,0,0,.18); min-width:230px;
+  padding:10px 12px; font-size:13px;
+}
+#fd-panel .btn-sm { font-size:12px; padding:3px 8px; }
+#fd-val-list { max-height:200px; overflow-y:auto; }
+#fd-val-list .form-check { margin-bottom:1px; font-size:12px; }
+/* ── モバイル買い候補カード ── */
+.buy-card {
+  background:#fff; border-radius:10px; padding:12px 14px;
+  box-shadow:0 2px 8px rgba(0,0,0,.08); margin-bottom:10px;
+}
+.buy-card-rank select {
+  font-size:1.1em; padding:6px 10px; border-radius:8px;
+  border:2px solid #2e75b6; font-weight:700; width:100%;
+}
+.buy-card-score {
+  font-size:1.6em; font-weight:800; line-height:1;
+}
+@media(max-width:767px){
+  .desktop-only { display:none !important; }
+  .mobile-only  { display:block !important; }
+  .nav-tabs .nav-link { font-size:12px; padding:6px 8px; }
+}
+@media(min-width:768px){
+  .mobile-only { display:none !important; }
+}
+</style>
+</head>
+<body>
+
+<nav class="navbar py-2 mb-3">
+  <div class="container-fluid flex-wrap gap-2">
+    <span class="navbar-brand text-white fw-bold fs-5">📈 配当投資 意思決定ツール</span>
+    <div class="d-flex gap-2 align-items-center ms-auto">
+      <span class="text-white-50 small d-none d-md-inline" id="lastUpdated"></span>
+      <button class="btn btn-outline-light btn-sm" onclick="exportRanks()" title="評価ランクをJSONで保存">💾 ランク保存</button>
+      <label class="btn btn-outline-warning btn-sm mb-0" title="評価ランクJSONを読み込む">
+        📂 ランク読込<input type="file" accept=".json" style="display:none" onchange="importRanks(this)">
+      </label>
+    </div>
+  </div>
+</nav>
+
+<div class="container-fluid px-3">
+  <ul class="nav nav-tabs mb-3">
+    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-dash">🏠 ダッシュボード</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-stocks">📊 銘柄データ</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-portfolio">💼 ポートフォリオ</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-buy">🎯 買い候補</button></li>
+  </ul>
+
+  <div class="tab-content">
+
+    <!-- ══ タブ1: ダッシュボード ══ -->
+    <div class="tab-pane fade show active" id="tab-dash">
+      <div class="row g-3 mb-3">
+        <div class="col-6 col-md-3">
+          <div class="card p-3 text-center">
+            <div class="text-muted small">登録銘柄数</div>
+            <div class="fs-3 fw-bold text-primary" id="d-total">-</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="card p-3 text-center">
+            <div class="text-muted small">保有評価額合計</div>
+            <div class="fs-5 fw-bold text-success" id="d-portVal">-</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="card p-3 text-center">
+            <div class="text-muted small">年間配当合計（見込）</div>
+            <div class="fs-5 fw-bold text-warning" id="d-annDiv">-</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="card p-3 text-center">
+            <div class="text-muted small">買い候補数</div>
+            <div class="fs-3 fw-bold text-danger" id="d-buyCount">-</div>
+          </div>
+        </div>
+      </div>
+      <div class="row g-3 mb-3">
+        <div class="col-lg-8">
+          <div class="card p-3">
+            <h6 class="fw-bold mb-3">🎯 買い候補 上位10銘柄</h6>
+            <div id="d-topList"><p class="text-muted small">銘柄データを読み込むと表示されます</p></div>
+          </div>
+        </div>
+        <div class="col-lg-4">
+          <div class="card p-3">
+            <h6 class="fw-bold mb-2">🏭 業種別保有比率（評価額）</h6>
+            <div style="position:relative;height:240px;">
+              <canvas id="sectorChart"></canvas>
+              <div id="sectorEmpty" class="text-center text-muted small pt-5">ポートフォリオ未設定</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- 口座別サマリー -->
+      <div class="row g-3 mb-3">
+        <div class="col-12">
+          <div class="card p-3">
+            <h6 class="fw-bold mb-2">💳 口座別サマリー</h6>
+            <div class="table-responsive">
+              <table class="table table-sm table-bordered mb-0">
+                <thead class="table-dark"><tr><th>口座</th><th>銘柄数</th><th class="text-end">評価額</th><th class="text-end">簿価</th><th class="text-end">損益</th><th class="text-end">損益率</th><th class="text-end">年間配当</th><th class="text-end">平均利回り</th></tr></thead>
+                <tbody id="acctSummaryBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- 業種別サマリー -->
+      <div class="card p-3">
+        <h6 class="fw-bold mb-2">📊 業種別サマリー（保有）</h6>
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered mb-0">
+            <thead class="table-dark"><tr><th>業種</th><th>銘柄数</th><th class="text-end">評価額</th><th class="text-end">比率</th><th class="text-end">平均利回り</th><th class="text-end">過不足</th></tr></thead>
+            <tbody id="sectorSummaryBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ タブ2: 銘柄データ ══ -->
+    <div class="tab-pane fade" id="tab-stocks">
+
+      <!-- J-Quants API パネル (V2) -->
+      <div class="jq-panel mb-3">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="fw-bold">🌐 J-Quants API V2（全上場銘柄を直接取得）</span>
+          <a href="https://jpx-jquants.com/ja/dashboard" target="_blank" class="badge bg-info text-dark text-decoration-none small">APIキー発行 →</a>
+          <span class="text-muted small">ダッシュボードで発行したAPIキーを入力</span>
+        </div>
+        <div id="jqLocalWarning" class="alert alert-warning py-2 px-3 mb-2 small d-none">
+          ⚠️ <b>CORS制限</b>: このHTMLはファイルから直接開かれています。J-Quantsボタンを使うには
+          <code>start_tool.py</code> を実行して <a href="http://localhost:8080" target="_blank">http://localhost:8080</a> で開いてください。
+        </div>
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+          <input type="text" id="jqApiKey" placeholder="J-Quants APIキー（x-api-key）" class="form-control form-control-sm" style="max-width:340px">
+          <button id="btnJQ" class="btn btn-info btn-sm text-dark fw-bold">🌐 全銘柄取得</button>
+          <button id="btnJQClear" class="btn btn-outline-secondary btn-sm">キーをクリア</button>
+          <div id="jqProgress" class="d-none">
+            <div class="spinner-border spinner-border-sm text-info me-1"></div>
+            <span id="jqProgressTxt" class="small text-info"></span>
+          </div>
+        </div>
+        <div id="jqStatus" class="small mt-1 text-muted"></div>
+      </div>
+
+      <!-- Yahoo Finance 株価取得パネル -->
+      <div class="card p-3 mb-3" style="border-left:4px solid #27ae60!important;">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="fw-bold">📈 Yahoo Finance（今日の株価・配当を取得）</span>
+          <span class="text-muted small">無料・制限なし・J-Quants不要</span>
+        </div>
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+          <button id="btnYahoo" class="btn btn-success btn-sm fw-bold">📈 今日の株価を取得</button>
+          <div id="yahooProgress" class="d-none">
+            <div class="spinner-border spinner-border-sm text-success me-1"></div>
+            <span id="yahooProgressTxt" class="small text-success"></span>
+          </div>
+        </div>
+        <div id="yahooStatus" class="small mt-1 text-muted"></div>
+      </div>
+
+      <!-- xlsx import パネル -->
+      <div class="card p-3 mb-3">
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+          <label class="btn btn-primary btn-sm mb-0">
+            📂 japan_stocks xlsxから読み込む
+            <input type="file" id="xlsxInput" accept=".xlsx,.xls,.csv" hidden>
+          </label>
+          <input type="text" class="form-control form-control-sm" id="sSearch" placeholder="コード・銘柄名検索..." style="max-width:200px">
+          <select class="form-select form-select-sm" id="sSector" style="max-width:180px"><option value="">全業種</option></select>
+          <select class="form-select form-select-sm" id="sMarket" style="max-width:140px">
+            <option value="">全市場</option><option>プライム</option><option>スタンダード</option><option>グロース</option>
+          </select>
+          <span class="text-muted small ms-auto" id="stockCount">0件</span>
+        </div>
+      </div>
+
+      <div class="card p-0">
+        <div class="table-responsive" style="max-height:58vh;overflow-y:auto;">
+          <table class="table table-sm table-hover table-bordered mb-0">
+            <thead class="table-dark sticky-top-2"><tr>
+              <th class="sortable" data-sort="stock" data-col="code">コード</th>
+              <th class="sortable" data-sort="stock" data-col="name">銘柄名</th>
+              <th class="sortable" data-sort="stock" data-col="sector">業種</th>
+              <th class="sortable" data-sort="stock" data-col="market">市場</th>
+              <th class="sortable text-end" data-sort="stock" data-col="price">株価</th>
+              <th class="sortable text-end" data-sort="stock" data-col="dividendAmount">配当金</th>
+              <th class="sortable text-end" data-sort="stock" data-col="dividendYield">利回り</th>
+              <th class="sortable text-end" data-sort="stock" data-col="per">PER</th>
+              <th class="sortable text-end" data-sort="stock" data-col="pbr">PBR</th>
+              <th class="sortable text-end" data-sort="stock" data-col="roe">ROE</th>
+              <th class="sortable text-end" data-sort="stock" data-col="roa">ROA</th>
+              <th class="sortable text-end" data-sort="stock" data-col="operatingMargin">営業利益率</th>
+              <th class="sortable text-end" data-sort="stock" data-col="payoutRatio">配当性向</th>
+              <th class="sortable text-end" data-sort="stock" data-col="equityRatio">自己資本比率</th>
+              <th class="sortable text-end" data-sort="stock" data-col="marketCap">時価総額</th>
+              <th class="sortable text-center" data-sort="stock" data-col="rank">評価</th>
+              <th>操作</th>
+            </tr></thead>
+            <tbody id="stockTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ タブ3: ポートフォリオ ══ -->
+    <div class="tab-pane fade" id="tab-portfolio">
+
+      <!-- 週次レポート import パネル -->
+      <div class="report-panel mb-3">
+        <div class="fw-bold mb-2">📊 週次レポート（portfolio_report_*.xlsx）から読み込む</div>
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+          <label class="btn btn-warning btn-sm mb-0 fw-bold">
+            📂 週次レポートを読み込む
+            <input type="file" id="reportXlsxInput" accept=".xlsx" hidden>
+          </label>
+          <span class="text-muted small">大輔NISA・大輔特定・美沙紀NISA の3口座 ＋ AGG/VYM を自動取込</span>
+        </div>
+        <div id="reportStatus" class="small mt-1 text-muted"></div>
+      </div>
+
+      <!-- 操作ボタン -->
+      <div class="card p-3 mb-3">
+        <div class="d-flex gap-2 flex-wrap">
+          <button class="btn btn-success btn-sm" id="btnAdd">＋ 個別に追加</button>
+          <button class="btn btn-outline-secondary btn-sm" id="btnExportPort">📥 CSV出力</button>
+          <button class="btn btn-outline-danger btn-sm" id="btnClearPort">🗑 全削除</button>
+        </div>
+      </div>
+
+      <div class="card p-0">
+        <div class="table-responsive">
+          <table class="table table-sm table-hover table-bordered mb-0">
+            <thead class="table-dark"><tr>
+              <th class="sortable" data-sort="port" data-col="account">口座</th>
+              <th class="sortable" data-sort="port" data-col="code">コード</th>
+              <th class="sortable" data-sort="port" data-col="name">銘柄名</th>
+              <th class="sortable" data-sort="port" data-col="sector">業種</th>
+              <th class="sortable text-end" data-sort="port" data-col="shares">保有株数</th>
+              <th class="sortable text-end" data-sort="port" data-col="acqPrice">取得単価</th>
+              <th class="sortable text-end" data-sort="port" data-col="price">現在株価</th>
+              <th class="sortable text-end" data-sort="port" data-col="eval">評価額</th>
+              <th class="sortable text-end" data-sort="port" data-col="plPct">損益率</th>
+              <th class="sortable text-end" data-sort="port" data-col="bookY">簿価利回り</th>
+              <th class="sortable text-end" data-sort="port" data-col="curY">現在利回り</th>
+              <th class="sortable text-center" data-sort="port" data-col="rank">評価ランク</th>
+              <th>コメント</th><th></th>
+            </tr></thead>
+            <tbody id="portTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ タブ4: 買い候補 ══ -->
+    <div class="tab-pane fade" id="tab-buy">
+      <div class="card p-3 mb-2">
+        <div class="row g-2 align-items-end">
+          <div class="col-auto">
+            <label class="form-label small mb-1">最低スコア</label>
+            <input type="number" class="form-control form-control-sm" id="fMinScore" value="55" style="width:70px">
+          </div>
+          <div class="col-auto">
+            <label class="form-label small mb-1">最低利回り(%)</label>
+            <input type="number" class="form-control form-control-sm" id="fMinYield" value="2" step="0.5" style="width:70px">
+          </div>
+          <div class="col-auto">
+            <label class="form-label small mb-1">評価ランク</label>
+            <select class="form-select form-select-sm" id="fRank" style="width:110px">
+              <option value="">全て</option><option value="★">★のみ</option>
+              <option value="優待">優待のみ</option>
+              <option value="★●">★●</option><option value="★●〇">★●〇</option>
+              <option value="unrated">未評価のみ</option>
+            </select>
+          </div>
+          <div class="col-auto">
+            <label class="form-label small mb-1">業種</label>
+            <select class="form-select form-select-sm" id="fSector" style="width:160px"><option value="">全業種</option></select>
+          </div>
+          <div class="col-auto">
+            <button class="btn btn-primary btn-sm" id="btnRefresh">🔄 更新</button>
+          </div>
+          <div class="col-auto ms-auto">
+            <button class="btn btn-outline-secondary btn-sm" id="btnExportBuy">📥 CSV</button>
+          </div>
+        </div>
+      </div>
+      <div class="card p-2 mb-2">
+        <div class="small text-muted d-flex flex-wrap gap-3">
+          <span><b>スコア:</b> 配当利回りPt(0-40) ＋ 評価ランクPt(0-40) ＋ 業種分散Pt(0-20)</span>
+          <span>★=40pt ●=30pt 〇=20pt ×=除外 未評価=15pt</span>
+        </div>
+      </div>
+      <!-- PC: テーブル表示 -->
+      <div class="card p-0 desktop-only">
+        <div class="table-responsive" style="max-height:60vh;overflow-y:auto;">
+          <table class="table table-sm table-hover table-bordered mb-0">
+            <thead class="table-dark sticky-top-2"><tr>
+              <th>#</th>
+              <th class="sortable" data-sort="buy" data-col="code">コード</th>
+              <th class="sortable" data-sort="buy" data-col="name">銘柄名</th>
+              <th class="sortable" data-sort="buy" data-col="sector">業種</th>
+              <th class="sortable text-end" data-sort="buy" data-col="price">株価</th>
+              <th class="sortable text-end" data-sort="buy" data-col="curY">現在利回り</th>
+              <th class="sortable text-end" data-sort="buy" data-col="bookY">簿価利回り</th>
+              <th class="sortable text-center" data-sort="buy" data-col="rank">評価</th>
+              <th class="sortable text-end" data-sort="buy" data-col="yPt">利回Pt</th>
+              <th class="sortable text-end" data-sort="buy" data-col="rPt">ランクPt</th>
+              <th class="sortable text-end" data-sort="buy" data-col="dPt">分散Pt</th>
+              <th class="sortable text-center" data-sort="buy" data-col="score">総合スコア</th>
+              <th class="sortable text-end" data-sort="buy" data-col="per">PER</th>
+              <th class="sortable text-end" data-sort="buy" data-col="pbr">PBR</th>
+              <th class="sortable text-end" data-sort="buy" data-col="roe">ROE</th>
+              <th class="text-center">判定</th>
+            </tr></thead>
+            <tbody id="buyTbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <!-- スマホ: カード表示 -->
+      <div id="buyCards" class="mobile-only"></div>
+    </div>
+
+  </div><!-- /tab-content -->
+</div>
+
+<!-- ══ モーダル ══ -->
+<div class="modal fade" id="modalAdd" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalTitle">銘柄を追加</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label fw-bold">証券コード / ティッカー</label>
+          <input type="text" class="form-control" id="mCode" placeholder="例: 7203 / AGG" maxlength="10">
+          <div class="small mt-1 text-primary" id="mStockName">—</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-bold">口座</label>
+          <select class="form-select" id="mAccount">
+            <option value="">—</option>
+            <option value="大輔NISA口座">大輔NISA口座</option>
+            <option value="大輔特定口座">大輔特定口座</option>
+            <option value="美沙紀NISA口座">美沙紀NISA口座</option>
+            <option value="その他">その他</option>
+          </select>
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col">
+            <label class="form-label fw-bold">保有株数</label>
+            <input type="number" class="form-control" id="mShares" placeholder="100" min="0">
+          </div>
+          <div class="col">
+            <label class="form-label fw-bold">取得単価（円）</label>
+            <input type="number" class="form-control" id="mAcqPrice" placeholder="2500" min="0" step="0.01">
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-bold">評価ランク</label>
+          <div class="btn-group w-100">
+            <input type="radio" class="btn-check" name="mRank" id="rStar"   value="★"><label class="btn btn-outline-warning" for="rStar">★ 最優先</label>
+            <input type="radio" class="btn-check" name="mRank" id="rBullet" value="●"><label class="btn btn-outline-primary" for="rBullet">● 優先</label>
+            <input type="radio" class="btn-check" name="mRank" id="rUta"    value="優待"><label class="btn btn-outline-secondary" for="rUta">優待</label>
+            <input type="radio" class="btn-check" name="mRank" id="rOpen"   value="〇"><label class="btn btn-outline-success" for="rOpen">〇 普通</label>
+            <input type="radio" class="btn-check" name="mRank" id="rX"      value="×"><label class="btn btn-outline-danger"  for="rX">× 除外</label>
+          </div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label fw-bold">コメント</label>
+          <input type="text" class="form-control" id="mComment" placeholder="メモ（任意）">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+        <button class="btn btn-primary" id="btnSave">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ フィルタードロップダウン ════ -->
+<div id="fd-panel">
+  <!-- ソートボタン -->
+  <div class="d-flex gap-1 mb-2">
+    <button class="btn btn-sm btn-outline-secondary w-50" id="fd-asc">▲ 昇順</button>
+    <button class="btn btn-sm btn-outline-secondary w-50" id="fd-desc">▼ 降順</button>
+  </div>
+  <hr class="my-2">
+  <!-- 数値フィルタ -->
+  <div id="fd-num" class="d-none mb-2">
+    <div class="text-muted small fw-bold mb-1">数値フィルタ</div>
+    <div class="input-group input-group-sm mb-1">
+      <span class="input-group-text" style="width:46px">以上</span>
+      <input type="number" class="form-control" id="fd-min" placeholder="最小">
+    </div>
+    <div class="input-group input-group-sm">
+      <span class="input-group-text" style="width:46px">以下</span>
+      <input type="number" class="form-control" id="fd-max" placeholder="最大">
+    </div>
+  </div>
+  <!-- 値フィルタ（テキスト列） -->
+  <div id="fd-val" class="d-none mb-2">
+    <div class="d-flex justify-content-between mb-1">
+      <span class="text-muted small fw-bold">値を選択</span>
+      <span>
+        <a href="#" id="fd-all" class="small me-2 text-decoration-none">全選択</a>
+        <a href="#" id="fd-none" class="small text-decoration-none">全解除</a>
+      </span>
+    </div>
+    <div id="fd-val-list"></div>
+  </div>
+  <hr class="my-2">
+  <div class="d-flex gap-1">
+    <button class="btn btn-sm btn-primary w-50" id="fd-apply">適用</button>
+    <button class="btn btn-sm btn-outline-danger w-50" id="fd-reset">クリア</button>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════
+// 利回り正規化（localStorage 旧データ・xlsx どちらにも対応）
+// 0.035 → 3.5%  |  350 → 3.5%  |  3.5 → 3.5%（そのまま）
+// ※ threshold を 0.1 に下げ: 0.48% などの低利回りを誤変換しないようにする
+function normalizeYield(v) {
+  const n = +v;
+  if (!n || isNaN(n) || n <= 0) return null;
+  if (n < 0.1) return Math.round(n * 10000) / 100;  // 0.035 → 3.5（小数形式）
+  if (n > 50)  return Math.round(n) / 100;           // 350   → 3.5（100倍エラー）
+  return Math.round(n * 100) / 100;                  // 3.5   → 3.50
+}
+
+// 利回りを返す（配当金÷株価で計算、なければ保存値を使用）
+// 保存値の形式に依存せず正確な値を返す
+function getYield(s) {
+  const div = +s?.dividendAmount;
+  const px  = +s?.price;
+  if (div > 0 && px > 0) return Math.round(div / px * 10000) / 100;
+  return +s?.dividendYield || 0;
+}
+
+// 日本語文字を含むか判定（銘柄名の上書き防止に使用）
+const isJapanese = s => /[぀-鿿]/.test(s || '');
+
+const ST = {
+  stocks: [],
+  // portfolio item: {code, account, shares, acqPrice, comment}
+  portfolio: [],
+  // 全銘柄の評価ランク {code: rank} （ポートフォリオ外銘柄も含む）
+  ranks: {},
+  save() {
+    localStorage.setItem('div_stocks',    JSON.stringify(this.stocks));
+    localStorage.setItem('div_portfolio', JSON.stringify(this.portfolio));
+    localStorage.setItem('div_ranks',     JSON.stringify(this.ranks));
+  },
+  load() {
+    try {
+      const s = localStorage.getItem('div_stocks');
+      const p = localStorage.getItem('div_portfolio');
+      const r = localStorage.getItem('div_ranks');
+      if (s) {
+        this.stocks = JSON.parse(s);
+        // 旧データの利回り100倍エラーを修正
+        this.stocks.forEach(st => {
+          if (st.dividendYield != null) st.dividendYield = normalizeYield(st.dividendYield);
+        });
+      }
+      if (r) this.ranks = JSON.parse(r);
+      if (p) {
+        this.portfolio = JSON.parse(p);
+        // マイグレーション: 旧形式の portfolio.rank を ST.ranks に移行
+        this.portfolio.forEach(port => {
+          if (port.rank && !this.ranks[port.code]) this.ranks[port.code] = port.rank;
+        });
+      }
+    } catch(e) {}
+  }
+};
+
+// japan_stocks xlsx 列マッピング
+const COL_MAP = {
+  '証券コード':'code','銘柄名':'name','33業種区分':'sector','市場区分':'market',
+  '現在株価':'price','年間配当金(円)':'dividendAmount','配当利回り(%)':'dividendYield',
+  'PER(実績)':'per','PBR':'pbr','ROE(%)':'roe','時価総額':'marketCap',
+  'ROA(%)':'roa','営業利益率(%)':'operatingMargin','配当性向(%)':'payoutRatio',
+  '自己資本比率(%)':'equityRatio',
+};
+
+// 口座名 → CSSクラス
+function acctClass(a) {
+  if (!a) return '';
+  if (a.includes('NISA') && (a.includes('大輔') || a.includes('DAISUKE'))) return 'acct-nisa1';
+  if (a.includes('NISA') && a.includes('美沙')) return 'acct-nisa2';
+  if (a.includes('特定')) return 'acct-tokutei';
+  if (/^[A-Z]{2,4}$/.test(a.trim()) || a.includes('米国')) return 'acct-us';
+  return '';
+}
+
+// ════════════════════════════════════════
+//  J-Quants API V2
+//  ・localhost 経由 (start_tool.py): /api/jquants/* → プロキシ転送（CORS回避）
+//  ・file:// 直接開く場合: https://api.jquants.com/v2/* 直接（CORSエラーになる）
+// ════════════════════════════════════════
+const IS_LOCAL = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+const JQ = IS_LOCAL ? '/api/jquants' : 'https://api.jquants.com/v2';
+
+// 直近の確定営業日 YYYYMMDD（当日は引け前の可能性があるため1日前から）
+function lastTradingDate() {
+  const d = new Date();
+  // 1日戻す（当日データがない場合に備えて）
+  d.setDate(d.getDate() - 1);
+  // 土曜→金曜、日曜→金曜
+  const dow = d.getDay();
+  if (dow === 0) d.setDate(d.getDate() - 2);
+  else if (dow === 6) d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0,10).replace(/-/g,'');
+}
+
+document.getElementById('btnJQ').addEventListener('click', async () => {
+  const btn    = document.getElementById('btnJQ');
+  const prog   = document.getElementById('jqProgress');
+  const progTxt= document.getElementById('jqProgressTxt');
+  const status = document.getElementById('jqStatus');
+
+  const apiKey = document.getElementById('jqApiKey').value.trim();
+  if (!apiKey) {
+    status.innerHTML = '<span class="text-danger">❌ APIキーを入力してください（<a href="https://jpx-jquants.com/ja/dashboard" target="_blank">ダッシュボードで発行</a>）</span>';
+    return;
+  }
+
+  btn.disabled = true;
+  prog.classList.remove('d-none');
+  status.textContent = '';
+  const setMsg = m => { progTxt.textContent = m; };
+
+  try {
+    const hdrs = {'x-api-key': apiKey};
+
+    // ① 全銘柄マスタ
+    setMsg('📋 銘柄一覧取得中...');
+    const r1 = await fetch(`${JQ}/equities/master`, {headers: hdrs});
+    if (!r1.ok) {
+      const err = await r1.json().catch(()=>({}));
+      throw new Error(`銘柄一覧失敗 HTTP ${r1.status}: ${err.message || JSON.stringify(err)}`);
+    }
+    const {data: masterData} = await r1.json();
+
+    // ② 短い待機（レートリミット回避）
+    await new Promise(r => setTimeout(r, 2000));
+
+    // ③ 直近営業日の全銘柄株価
+    let dateStr = lastTradingDate();
+    setMsg(`📈 株価取得中 (${dateStr})...`);
+    let priceData = null;
+    let priceErrMsg = '';
+
+    for (let retry = 0; retry < 5; retry++) {
+      const r2 = await fetch(`${JQ}/equities/bars/daily?date=${dateStr}`, {headers: hdrs});
+      if (r2.ok) {
+        const body = await r2.json();
+        priceData = body.data || [];
+        break;
+      }
+      let errBody = {};
+      try { errBody = await r2.json(); } catch {}
+      priceErrMsg = `HTTP ${r2.status}: ${errBody.message || JSON.stringify(errBody)}`;
+
+      if (r2.status === 400) {
+        // サブスクリプション期間外 → エラーから終了日を抽出して再試行
+        const match = (errBody.message || '').match(/~\s*(\d{4}-\d{2}-\d{2})/);
+        if (match) {
+          const endDate = new Date(match[1]);
+          const dow = endDate.getDay();
+          if (dow === 0) endDate.setDate(endDate.getDate() - 2);
+          else if (dow === 6) endDate.setDate(endDate.getDate() - 1);
+          dateStr = endDate.toISOString().slice(0,10).replace(/-/g,'');
+          setMsg(`📈 プラン対象日（${dateStr}）で再取得中...`);
+          await new Promise(r => setTimeout(r, 2000));
+          continue;
+        }
+        break; // 日付情報なし → 諦める
+      }
+
+      if (r2.status === 429) {
+        for (let i = 60; i > 0; i--) {
+          setMsg(`⏳ レートリミット超過、待機中... ${i}秒`);
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      }
+
+      // 通常リトライ: 1日戻す
+      const d = new Date(dateStr.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'));
+      d.setDate(d.getDate() - 1);
+      const dow = d.getDay();
+      if (dow === 0) d.setDate(d.getDate() - 2);
+      else if (dow === 6) d.setDate(d.getDate() - 1);
+      dateStr = d.toISOString().slice(0,10).replace(/-/g,'');
+      setMsg(`📈 株価再取得中 (${dateStr})...`);
+    }
+
+    // 株価取得失敗でも銘柄マスタだけで続行（プラン制限等の場合）
+    const priceMap = {};
+    if (!priceData) {
+      status.innerHTML = `<span class="text-warning">⚠️ 株価データ取得不可（${priceErrMsg}）。銘柄一覧のみ取得します。週次レポートxlsxを読み込むと価格が補完されます。</span>`;
+    } else {
+      // V2では終値フィールドが "C"（V1は "Close"）
+      priceData.forEach(q => { priceMap[q.Code] = q.C ?? q.Close ?? null; });
+    }
+
+    // 既存の配当データを保持
+    const oldDivMap = {};
+    ST.stocks.forEach(s => {
+      if (s.dividendAmount || s.dividendYield)
+        oldDivMap[s.code] = { div: s.dividendAmount, yld: s.dividendYield };
+    });
+
+    // V2フィールド: Code, CoName, S33Nm(33業種名), MktNm(市場名)
+    const seen = new Set();
+    const newStocks = [];
+    for (const s of (masterData || [])) {
+      const code5 = String(s.Code || '');
+      const code4 = code5.slice(0, 4);
+      if (!/^\d{4}$/.test(code4)) continue;
+      if (seen.has(code4)) continue;
+      seen.add(code4);
+
+      const old = oldDivMap[code4] || {};
+      newStocks.push({
+        code:           code4,
+        name:           s.CoName   || '',
+        sector:         s.S33Nm    || '不明',
+        market:         s.MktNm    || '',
+        price:          priceMap[code5] ?? null,
+        dividendAmount: old.div ?? null,
+        dividendYield:  old.yld ?? null,
+        per: null, pbr: null, roe: null,
+      });
+    }
+
+    // 米国ETF等の非日本株を維持
+    ST.stocks.filter(s => !/^\d{4}$/.test(s.code)).forEach(s => {
+      if (!newStocks.find(n => n.code === s.code)) newStocks.push(s);
+    });
+
+    ST.stocks = newStocks;
+    // APIキーを保存（ページ再読み込み後も使えるように）
+    localStorage.setItem('jq_apikey', apiKey);
+    ST.save();
+
+    document.getElementById('lastUpdated').textContent =
+      `J-Quants V2更新: ${new Date().toLocaleString('ja-JP')} | ${newStocks.length.toLocaleString()}銘柄`;
+    const priceNote = priceData
+      ? `株価 ${priceData.length.toLocaleString()}件 / ${dateStr}`
+      : `株価なし（${priceErrMsg}）`;
+    if (priceData) {
+      status.textContent = `✅ ${newStocks.length.toLocaleString()}銘柄取得完了（${priceNote}）`;
+    } else {
+      status.innerHTML += `<br>✅ ${newStocks.length.toLocaleString()}銘柄の銘柄一覧を取得しました（${priceNote}）`;
+    }
+    renderAll();
+
+  } catch(e) {
+    let msg = String(e.message || e);
+    if (msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('cors') ||
+        msg.toLowerCase().includes('network') || msg.toLowerCase().includes('load')) {
+      msg = `CORS制限エラーです。HTMLをファイルで直接開いている場合、外部APIへのアクセスがブロックされます。\n\n` +
+            `【解決方法】\n` +
+            `  1. start_tool.py を dividend_tool.html と同じフォルダに置く\n` +
+            `  2. コマンドプロンプトで: python start_tool.py\n` +
+            `  3. 自動で開く http://localhost:8080 でツールを使う`;
+    }
+    status.innerHTML = `<span class="text-danger">❌ ${msg}</span>`;
+  } finally {
+    btn.disabled = false;
+    prog.classList.add('d-none');
+  }
+});
+
+// ════════════════════════════════════════
+//  株価取得（yfinance 経由 /api/prices）
+// ════════════════════════════════════════
+document.getElementById('btnYahoo').addEventListener('click', async () => {
+  const btn     = document.getElementById('btnYahoo');
+  const prog    = document.getElementById('yahooProgress');
+  const progTxt = document.getElementById('yahooProgressTxt');
+  const statusEl= document.getElementById('yahooStatus');
+
+  if (!IS_LOCAL) {
+    statusEl.innerHTML = '<span class="text-danger">❌ start_tool.py 経由（localhost:8080）でのみ使用できます</span>';
+    return;
+  }
+
+  const codes = ST.stocks.filter(s => /^\d{4}$/.test(s.code)).map(s => s.code);
+  if (!codes.length) {
+    statusEl.textContent = '⚠️ 先にJ-Quantsまたはxlsxで銘柄を読み込んでください';
+    return;
+  }
+
+  btn.disabled = true;
+  prog.classList.remove('d-none');
+  statusEl.textContent = '';
+
+  try {
+    // yfinance は一括ダウンロードなので全コードを一度に送る
+    // ただし URL 長さ制限のため 200 件ずつ分割
+    const batchSize = 200;
+    let updated = 0, errors = 0;
+
+    for (let i = 0; i < codes.length; i += batchSize) {
+      const batch = codes.slice(i, i + batchSize);
+      progTxt.textContent =
+        `${Math.min(i + batchSize, codes.length).toLocaleString()} / ${codes.length.toLocaleString()} 銘柄...`;
+
+      try {
+        const resp = await fetch(`/api/prices?codes=${batch.join(',')}`);
+        const data = await resp.json();
+
+        if (!resp.ok) {
+          // yfinance 未インストールなど
+          const hint = data.hint ? `\n${data.hint}` : '';
+          throw new Error((data.error || `HTTP ${resp.status}`) + hint);
+        }
+
+        const prices = data.prices || {};
+        for (const [code, price] of Object.entries(prices)) {
+          const si = ST.stocks.findIndex(s => s.code === code);
+          if (si < 0) continue;
+          if (price > 0) {
+            ST.stocks[si].price = price;
+            updated++;
+          }
+        }
+      } catch(e) {
+        errors++;
+        // yfinance 未インストールの場合は早期終了してメッセージ表示
+        if (e.message.includes('yfinance') || e.message.includes('pip install')) {
+          statusEl.innerHTML =
+            `<span class="text-danger">❌ ${e.message}</span>` +
+            `<br><span class="text-muted small">コマンドプロンプトで <code>pip install yfinance</code> を実行後、start_tool.py を再起動してください</span>`;
+          return;
+        }
+      }
+
+      // バッチ間インターバル不要（yfinance はサーバー側で一括取得）
+    }
+
+    ST.save();
+    document.getElementById('lastUpdated').textContent =
+      `株価更新: ${new Date().toLocaleString('ja-JP')} | ${updated.toLocaleString()}銘柄`;
+    statusEl.textContent =
+      `✅ ${updated.toLocaleString()}銘柄の株価を更新しました${errors ? `（${errors}バッチ失敗）` : ''}`;
+    renderAll();
+
+  } catch(e) {
+    statusEl.innerHTML = `<span class="text-danger">❌ ${e.message}</span>`;
+  } finally {
+    btn.disabled = false;
+    prog.classList.add('d-none');
+  }
+});
+
+document.getElementById('btnJQClear').addEventListener('click', () => {
+  document.getElementById('jqApiKey').value = '';
+  localStorage.removeItem('jq_apikey');
+  document.getElementById('jqStatus').textContent = 'APIキーをクリアしました';
+});
+
+// 起動時にAPIキーを復元
+{
+  const saved = localStorage.getItem('jq_apikey');
+  if (saved) document.getElementById('jqApiKey').value = saved;
+}
+
+// ════════════════════════════════════════
+//  japan_stocks xlsx インポート
+// ════════════════════════════════════════
+document.getElementById('xlsxInput').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const wb   = XLSX.read(ev.target.result, {type:'array'});
+      const name = wb.SheetNames.includes('全銘柄一覧') ? '全銘柄一覧' : wb.SheetNames[0];
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], {header:1, defval:''});
+
+      let hIdx = -1;
+      for (let i = 0; i < Math.min(rows.length, 8); i++) {
+        if (rows[i].some(v => String(v).trim() === '証券コード')) { hIdx = i; break; }
+      }
+      if (hIdx < 0) { alert('「証券コード」列が見つかりません'); return; }
+
+      const headers = rows[hIdx].map(h => String(h).trim());
+      const newStocks = rows.slice(hIdx + 1)
+        .filter(r => r.some(v => v !== ''))
+        .map(r => {
+          const obj = {};
+          headers.forEach((h, i) => { const k = COL_MAP[h]; if (k) obj[k] = r[i]; });
+          obj.code = String(obj.code ?? '').replace(/\.0$/, '').padStart(4,'0');
+          // 配当金÷株価で計算（保存値の形式に依存しない）
+          const _div = +obj.dividendAmount || 0;
+          const _px  = +obj.price || 0;
+          if (_div > 0 && _px > 0) {
+            obj.dividendYield = Math.round(_div / _px * 10000) / 100;
+          } else {
+            obj.dividendYield = normalizeYield(obj.dividendYield);
+          }
+          // 銘柄名: 既存に日本語名があれば xlsx の英語名で上書きしない
+          const _exist = ST.stocks.find(s => s.code === obj.code);
+          if (_exist && isJapanese(_exist.name) && !isJapanese(String(obj.name||''))) {
+            obj.name = _exist.name;
+          }
+          return obj;
+        })
+        .filter(s => /^\d{4}$/.test(s.code));
+
+      // Keep non-JP stocks (AGG/VYM)
+      ST.stocks.filter(s => !/^\d{4}$/.test(s.code)).forEach(s => {
+        if (!newStocks.find(n => n.code === s.code)) newStocks.push(s);
+      });
+
+      ST.stocks = newStocks;
+      ST.save();
+      document.getElementById('lastUpdated').textContent =
+        `xlsx更新: ${new Date().toLocaleString('ja-JP')} | ${ST.stocks.length.toLocaleString()}銘柄`;
+      renderAll();
+      alert(`✅ ${newStocks.length.toLocaleString()}銘柄を読み込みました`);
+    } catch(err) { alert('読み込みエラー: ' + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+  e.target.value = '';
+});
+
+// ════════════════════════════════════════
+//  週次レポート xlsx インポート（ポートフォリオ）
+// ════════════════════════════════════════
+document.getElementById('reportXlsxInput').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById('reportStatus');
+  statusEl.textContent = '読み込み中...';
+
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const wb = XLSX.read(ev.target.result, {type:'array'});
+      const sheetName = wb.SheetNames.includes('全銘柄一覧') ? '全銘柄一覧' : wb.SheetNames[0];
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {header:1, defval:''});
+
+      // ヘッダー行検出
+      let hIdx = -1;
+      for (let i = 0; i < Math.min(rows.length, 10); i++) {
+        if (rows[i].some(v => /コード/.test(String(v)))) { hIdx = i; break; }
+      }
+      if (hIdx < 0) { alert('ヘッダーが見つかりません'); return; }
+
+      const headers = rows[hIdx].map(h => String(h).trim());
+      const ci = keyword => headers.findIndex(h => h.includes(keyword));
+
+      const COL = {
+        acct: ci('口座'),
+        code: ci('コード'),
+        name: ci('銘柄名'),
+        sec:  ci('業種'),
+        sh:   ci('保有数'),
+        acq:  ci('平均購入価格'),
+        cur:  ci('現在価格'),
+        div:  ci('1株配当'),
+        yld:  ci('表面配当利回り'),
+      };
+
+      const toNum = v => parseFloat(String(v ?? '').replace(/[,円%－\-]/g,'').trim()) || 0;
+      const newItems = [];
+      const updatedStocks = [];
+
+      for (const row of rows.slice(hIdx + 1)) {
+        const rawCode = String(row[COL.code] ?? '').replace(/\.0$/, '').trim();
+        // スキップ: 空・合計行・区切り行
+        if (!rawCode || rawCode.length < 2 ||
+            rawCode.includes('合計') || rawCode.includes('口座') || rawCode === '-') continue;
+
+        const code     = /^\d/.test(rawCode) ? rawCode.padStart(4,'0') : rawCode.toUpperCase();
+        const shares   = toNum(row[COL.sh]);
+        const acqPrice = toNum(row[COL.acq]);
+        if (shares <= 0 && acqPrice <= 0) continue;
+
+        const price    = toNum(row[COL.cur]);
+        const divAmt   = toNum(row[COL.div]);
+        let   yldVal   = toNum(row[COL.yld]);
+        const sec      = String(row[COL.sec]  ?? '').trim();
+        const name     = String(row[COL.name] ?? '').trim();
+        const acct     = COL.acct >= 0 ? String(row[COL.acct] ?? '').trim() : '';
+
+        // 配当金÷株価で計算できる場合はそちらを優先
+        if (divAmt > 0 && price > 0) {
+          yldVal = Math.round(divAmt / price * 10000) / 100;
+        } else {
+          yldVal = normalizeYield(yldVal) || 0;
+        }
+
+        // 銘柄マスタを更新（あれば価格・配当・名前を上書き、なければ追加）
+        const si = ST.stocks.findIndex(s => s.code === code);
+        if (si >= 0) {
+          if (name && (!ST.stocks[si].name || isJapanese(name) || !isJapanese(ST.stocks[si].name)))
+            ST.stocks[si].name = name;
+          if (price  > 0)    ST.stocks[si].price          = price;
+          if (divAmt > 0)    ST.stocks[si].dividendAmount  = divAmt;
+          if (yldVal > 0)    ST.stocks[si].dividendYield   = yldVal;
+          // 業種は japan_stocks の値を優先。マスタにない場合のみポートフォリオ側を使う
+          if (sec && (!ST.stocks[si].sector || ST.stocks[si].sector === '不明'))
+            ST.stocks[si].sector = sec;
+        } else if (price > 0 || name) {
+          ST.stocks.push({
+            code, name, sector:sec, market:'',
+            price: price||null, dividendAmount:divAmt||null,
+            dividendYield:yldVal||null, per:null, pbr:null, roe:null
+          });
+        }
+
+        // 既存の評価ランク・コメントを引き継ぐ
+        const existPort = ST.portfolio.find(p => p.code === code);
+        newItems.push({
+          code, account:acct, shares, acqPrice,
+          rank:    getStockRank(code) || existPort?.rank || '',
+          comment: existPort?.comment ?? '',
+        });
+      }
+
+      if (!newItems.length) { statusEl.textContent = '⚠️ 有効な銘柄が見つかりません'; return; }
+
+      if (confirm(`${newItems.length}銘柄を読み込みます。\n「OK」: ポートフォリオを上書き\n「キャンセル」: 既存データに追加`)) {
+        ST.portfolio = newItems;
+      } else {
+        for (const ni of newItems) {
+          const idx = ST.portfolio.findIndex(p => p.code === ni.code);
+          if (idx >= 0) ST.portfolio[idx] = {...ST.portfolio[idx], shares:ni.shares, acqPrice:ni.acqPrice, account:ni.account};
+          else ST.portfolio.push(ni);
+        }
+      }
+
+      ST.save();
+      statusEl.textContent = `✅ ${newItems.length}銘柄を読み込みました（${new Date().toLocaleString('ja-JP')}）`;
+      renderAll();
+    } catch(err) {
+      statusEl.textContent = '❌ エラー: ' + err.message;
+      console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  e.target.value = '';
+});
+
+// ════════════════════════════════════════
+//  スコア計算
+// ════════════════════════════════════════
+const RANK_PT  = {'★':30,'●':20,'優待':0,'〇':0,'×':0};
+const RANK_CSS = {'★':'rank-★','●':'rank-●','優待':'rank-優待','〇':'rank-〇','×':'rank-×'};
+// 自動除外条件チェック（営業利益率≤1% / 自己資本比率≤20% / 時価総額≤100億 or 未表示）
+function isAutoExcluded(code) {
+  const s = ST.stocks.find(s => s.code === code);
+  if (!s) return false;
+  const margin = s.operatingMargin != null ? +s.operatingMargin : null;
+  const equity = s.equityRatio     != null ? +s.equityRatio     : null;
+  const cap    = s.marketCap       != null ? +s.marketCap       : null;
+  if (s.dividendAmount != null && +s.dividendAmount <= 0) return true; // 無配当（データあり・0円）
+  if (margin !== null && margin <= 1)  return true;   // 営業利益率 1%以下
+  if (equity !== null && equity <= 20) return true;   // 自己資本比率 20%以下（データあり時のみ）
+  if (cap    !== null && cap <= 10000000000) return true;  // 時価総額 100億以下（データあり時のみ）
+  return false;
+}
+
+// 全銘柄の評価ランク取得（ST.ranks を単一ソースとして使用）
+// ST.ranks にキーがあれば手動設定を優先、なければ自動除外ルールを適用
+function getStockRank(code) {
+  if (code in ST.ranks) return ST.ranks[code] || '';  // 手動設定（null='−'選択も含む）
+  return isAutoExcluded(code) ? '×' : '';
+}
+
+function sectorWeights() {
+  const vals = {};
+  let total = 0;
+  for (const p of ST.portfolio) {
+    const s   = ST.stocks.find(s => s.code === p.code);
+    const px  = +s?.price || +p.acqPrice || 0;
+    const val = px * (+p.shares || 0);
+    const sec = s?.sector || '不明';
+    vals[sec] = (vals[sec] || 0) + val;
+    total += val;
+  }
+  return { vals, total };
+}
+
+function calcScore(code) {
+  const s = ST.stocks.find(s => s.code === code);
+  const p = ST.portfolio.find(p => p.code === code);
+  if (!s) return null;
+
+  const rank = getStockRank(code);
+  if (rank === '×') return { total:0, yPt:0, rPt:0, dPt:0, isBuy:false, isWatch:false };
+
+  const yld  = getYield(s);
+  // 利回り段階テーブル（下限3%・上限5%・0.5%きざみ・最大30点）
+  const yPt  = yld >= 5.0 ? 30
+             : yld >= 4.5 ? 28
+             : yld >= 4.0 ? 24
+             : yld >= 3.5 ? 20
+             : yld >= 3.0 ? 15
+             :               0;
+  const rPt  = rank ? (RANK_PT[rank] ?? 0) : 0;
+
+  const { vals, total } = sectorWeights();
+  const sec = s.sector || '不明';
+  let dPt = 40;
+  if (total > 0) {
+    const nSec  = Object.keys(vals).length || 1;
+    const tgt   = 1 / nSec;
+    const act   = (vals[sec] || 0) / total;
+    dPt = vals[sec] ? Math.max(0, Math.min(40, (tgt - act) / tgt * 40)) : 40;
+  }
+
+  const totalPt = Math.round(yPt + rPt + dPt);
+  const thresh  = +document.getElementById('fMinScore')?.value || 55;
+  return {
+    total: totalPt,
+    yPt: Math.round(yPt  * 10) / 10,
+    rPt: Math.round(rPt),
+    dPt: Math.round(dPt  * 10) / 10,
+    isBuy:   totalPt >= thresh,
+    isWatch: totalPt >= thresh - 15 && totalPt < thresh,
+  };
+}
+
+// ════════════════════════════════════════
+//  フォーマット
+// ════════════════════════════════════════
+const fN  = (v, d=0) => { const n=+v; return (!v && v!==0)||isNaN(n)?'-':n.toLocaleString('ja-JP',{minimumFractionDigits:d,maximumFractionDigits:d}); };
+const fY  = v => { const n=+v; return isNaN(n)||!v?'-':n.toFixed(2)+'%'; };
+const fPct= (v, d=1) => { const n=+v; return (!v && v!==0)||isNaN(n)?'-':n.toFixed(d)+'%'; };
+const fM  = v => { const n=+v; if(!v||isNaN(n)||n<=0) return '-'; if(n>=1e12) return (n/1e12).toFixed(1)+'兆'; return Math.round(n/1e8).toLocaleString('ja-JP')+'億'; };
+const fPL = v => { const n=+v; return isNaN(n)?'-':(n>=0?'+':'')+n.toFixed(1)+'%'; };
+const scoreColor = v => v>=80?'#27ae60':v>=60?'#f39c12':'#dc3545';
+const rankBadge  = r => !r ? '<span class="text-muted">-</span>'
+                            : `<span class="rank-badge ${RANK_CSS[r]||''}">${r}</span>`;
+const acctBadge  = a => !a ? '' : `<span class="${acctClass(a)}">${a}</span>`;
+
+// ════════════════════════════════════════
+//  RENDER: ダッシュボード
+// ════════════════════════════════════════
+let chartInst = null;
+
+function renderDash() {
+  document.getElementById('d-total').textContent = ST.stocks.length.toLocaleString();
+
+  const { vals, total } = sectorWeights();
+  document.getElementById('d-portVal').textContent = total > 0 ? '¥'+fN(total) : '-';
+
+  // 年間配当合計
+  let annDiv = 0;
+  for (const p of ST.portfolio) {
+    const s = ST.stocks.find(s => s.code === p.code);
+    annDiv += (+s?.dividendAmount || 0) * (+p.shares || 0);
+  }
+  document.getElementById('d-annDiv').textContent = annDiv > 0 ? '¥'+fN(Math.round(annDiv)) : '-';
+
+  // 買い候補数
+  const minScore = +document.getElementById('fMinScore')?.value || 55;
+  const minYield = +document.getElementById('fMinYield')?.value || 2;
+  const allBuy = ST.stocks
+    .map(s => ({...s, sc:calcScore(s.code), p:ST.portfolio.find(p=>p.code===s.code)}))
+    .filter(s => s.sc?.isBuy && getYield(s)>=minYield)
+    .sort((a,b) => b.sc.total - a.sc.total);
+  document.getElementById('d-buyCount').textContent = allBuy.length;
+
+  // トップ10
+  document.getElementById('d-topList').innerHTML = allBuy.length === 0
+    ? '<p class="text-muted small">条件に合う候補がありません</p>'
+    : `<table class="table table-sm table-hover"><thead><tr>
+        <th>#</th><th>コード</th><th>銘柄名</th><th>業種</th>
+        <th class="text-end">利回り</th><th class="text-center">評価</th><th class="text-center">スコア</th>
+      </tr></thead><tbody>${allBuy.slice(0,10).map((s,i)=>`<tr>
+        <td>${i+1}</td><td><code>${s.code}</code></td><td>${s.name||'-'}</td>
+        <td><small class="text-muted">${s.sector||'-'}</small></td>
+        <td class="text-end text-success fw-bold">${fY(getYield(s))}</td>
+        <td class="text-center">${rankBadge(getStockRank(s.code))}</td>
+        <td class="text-center"><span class="score-pill" style="background:${scoreColor(s.sc.total)}22;color:${scoreColor(s.sc.total)}">${s.sc.total}</span></td>
+      </tr>`).join('')}</tbody></table>`;
+
+  // ドーナツチャート（業種別）
+  const labels = Object.keys(vals);
+  document.getElementById('sectorEmpty').style.display = labels.length ? 'none' : 'block';
+  if (chartInst) { chartInst.destroy(); chartInst = null; }
+  if (labels.length) {
+    chartInst = new Chart(document.getElementById('sectorChart'), {
+      type: 'doughnut',
+      data: {
+        labels,
+        datasets: [{
+          data: labels.map(l=>vals[l]),
+          backgroundColor: labels.map((_,i)=>`hsl(${Math.round(i*360/labels.length)},60%,55%)`),
+          borderWidth: 1,
+        }]
+      },
+      options: { plugins:{ legend:{ position:'right', labels:{ font:{size:10}, boxWidth:12 } } }, maintainAspectRatio:false }
+    });
+  }
+
+  // 口座別サマリー
+  const acctMap = {};
+  for (const p of ST.portfolio) {
+    const s    = ST.stocks.find(s => s.code === p.code);
+    const px   = +s?.price || 0;
+    const acq  = +p.acqPrice || 0;
+    const sh   = +p.shares || 0;
+    const acct = p.account || '不明';
+    if (!acctMap[acct]) acctMap[acct] = {count:0,eval:0,book:0,annDiv:0};
+    acctMap[acct].count++;
+    acctMap[acct].eval  += px * sh;
+    acctMap[acct].book  += acq * sh;
+    acctMap[acct].annDiv += (+s?.dividendAmount||0) * sh;
+  }
+  const ORDER = ['大輔NISA口座','大輔特定口座','美沙紀NISA口座'];
+  const acctKeys = [...ORDER.filter(k=>acctMap[k]), ...Object.keys(acctMap).filter(k=>!ORDER.includes(k))];
+  document.getElementById('acctSummaryBody').innerHTML = acctKeys.length === 0
+    ? '<tr><td colspan="8" class="text-muted text-center">ポートフォリオ未設定</td></tr>'
+    : acctKeys.map(a=>{
+        const m = acctMap[a];
+        const pl = m.eval - m.book;
+        const plPct = m.book > 0 ? pl/m.book*100 : null;
+        const avgY  = m.eval > 0 ? m.annDiv/m.eval*100 : null;
+        const plCls = !plPct ? '' : plPct>=0?'text-success fw-bold':'text-danger fw-bold';
+        return `<tr>
+          <td>${acctBadge(a)||a}</td><td>${m.count}</td>
+          <td class="text-end">¥${fN(Math.round(m.eval))}</td>
+          <td class="text-end">¥${fN(Math.round(m.book))}</td>
+          <td class="text-end ${plCls}">${plPct!==null?fPL(plPct):'-'}</td>
+          <td class="text-end ${plCls}">${pl>=0?'+':'-'}¥${fN(Math.abs(Math.round(pl)))}</td>
+          <td class="text-end text-warning">¥${fN(Math.round(m.annDiv))}</td>
+          <td class="text-end text-success">${avgY!==null?avgY.toFixed(2)+'%':'-'}</td>
+        </tr>`;
+      }).join('');
+
+  // 業種別サマリー
+  const targetW = labels.length ? 1/labels.length : 0;
+  document.getElementById('sectorSummaryBody').innerHTML = labels.length === 0
+    ? '<tr><td colspan="6" class="text-muted text-center">ポートフォリオ未設定</td></tr>'
+    : labels.sort((a,b)=>vals[b]-vals[a]).map(sec=>{
+        const w = vals[sec]/total;
+        const diff = w - targetW;
+        const diffStr = (diff>=0?'+':'') + (diff*100).toFixed(1)+'%';
+        const diffCls = diff>0.03?'text-danger':diff<-0.03?'text-success':'text-muted';
+        const portItems = ST.portfolio.filter(p=>(ST.stocks.find(s=>s.code===p.code)?.sector||'不明')===sec);
+        const avgY = portItems.reduce((sum,p)=>{
+          return sum + getYield(ST.stocks.find(s=>s.code===p.code));
+        },0) / (portItems.length||1);
+        return `<tr>
+          <td>${sec}</td><td>${portItems.length}</td>
+          <td class="text-end">¥${fN(Math.round(vals[sec]))}</td>
+          <td class="text-end">${(w*100).toFixed(1)}%</td>
+          <td class="text-end text-success">${avgY.toFixed(2)}%</td>
+          <td class="text-end ${diffCls} fw-bold">${diffStr}</td>
+        </tr>`;
+      }).join('');
+}
+
+// ════════════════════════════════════════
+//  RENDER: 銘柄テーブル
+// ════════════════════════════════════════
+let stockSort = { col:'dividendYield', dir:-1 };
+let portSort  = { col:'account',       dir:  1 };
+let buySort   = { col:'score',         dir: -1 };
+
+// ソート共通処理
+function applySortClass(th, sort) {
+  document.querySelectorAll(`th.sortable[data-sort="${th.dataset.sort}"]`)
+    .forEach(t => t.classList.remove('sort-asc','sort-desc'));
+  th.classList.add(sort.dir === -1 ? 'sort-desc' : 'sort-asc');
+}
+
+function renderStocks() {
+  const q     = document.getElementById('sSearch').value.toLowerCase();
+  const sec   = document.getElementById('sSector').value;
+  const mkt   = document.getElementById('sMarket').value;
+
+  const sectors = [...new Set(ST.stocks.map(s=>s.sector).filter(Boolean))].sort();
+  const sCur = document.getElementById('sSector').value;
+  document.getElementById('sSector').innerHTML = '<option value="">全業種</option>' +
+    sectors.map(s=>`<option${s===sCur?' selected':''}>${s}</option>`).join('');
+
+  const TEXT_COLS = new Set(['code','name','sector','market','rank']);
+  let list = ST.stocks.filter(s =>
+    (!q || s.code.includes(q) || (s.name||'').toLowerCase().includes(q)) &&
+    (!sec || s.sector===sec) &&
+    (!mkt || (s.market||'').includes(mkt))
+  );
+  // 列フィルタ適用（rank は ST.ranks から取得）
+  list = applyFilters(list, 'stock', (s, col) => col === 'rank' ? getStockRank(s.code) : (s[col] ?? ''));
+  list = list.sort((a,b) => {
+    if (stockSort.col === 'rank') {
+      const ro = {'★':0,'●':1,'優待':2,'〇':3,'×':4,'':5};
+      return stockSort.dir * ((ro[getStockRank(a.code)]??5) - (ro[getStockRank(b.code)]??5));
+    }
+    if (TEXT_COLS.has(stockSort.col)) {
+      return stockSort.dir * String(a[stockSort.col]||'').localeCompare(String(b[stockSort.col]||''));
+    }
+    const va=+a[stockSort.col]||0, vb=+b[stockSort.col]||0;
+    return stockSort.dir*(vb-va);
+  });
+
+  document.getElementById('stockCount').textContent = `${list.length.toLocaleString()}件`;
+
+  const LIMIT = 500;
+  document.getElementById('stockTbody').innerHTML =
+    list.slice(0, LIMIT).map(s => {
+      const inPort = ST.portfolio.some(p=>p.code===s.code);
+      return `<tr>
+        <td><code>${s.code}</code></td><td>${s.name||'-'}</td>
+        <td><small class="text-muted">${s.sector||'-'}</small></td>
+        <td><small>${s.market||'-'}</small></td>
+        <td class="text-end">${fN(s.price)}</td>
+        <td class="text-end">${fN(s.dividendAmount)}</td>
+        <td class="text-end fw-bold text-success">${fY(getYield(s))}</td>
+        <td class="text-end">${fN(s.per,1)}</td>
+        <td class="text-end">${fN(s.pbr,2)}</td>
+        <td class="text-end">${fPct(s.roe)}</td>
+        <td class="text-end">${fPct(s.roa)}</td>
+        <td class="text-end">${fPct(s.operatingMargin)}</td>
+        <td class="text-end">${fPct(s.payoutRatio)}</td>
+        <td class="text-end">${fPct(s.equityRatio)}</td>
+        <td class="text-end">${fM(s.marketCap)}</td>
+        <td class="text-center">
+          <select class="form-select form-select-sm py-0 text-center" style="width:72px"
+            onchange="updateStockRank('${s.code}',this.value)">
+            <option value="" ${!getStockRank(s.code)?'selected':''}>-</option>
+            <option value="★" ${getStockRank(s.code)==='★'?'selected':''}>★</option>
+            <option value="●" ${getStockRank(s.code)==='●'?'selected':''}>●</option>
+            <option value="優待" ${getStockRank(s.code)==='優待'?'selected':''}>優待</option>
+            <option value="〇" ${getStockRank(s.code)==='〇'?'selected':''}>〇</option>
+            <option value="×" ${getStockRank(s.code)==='×'?'selected':''}>×</option>
+          </select>
+        </td>
+        <td>${inPort
+          ? '<span class="badge bg-success">保有中</span>'
+          : `<button class="btn btn-outline-primary btn-sm py-0 px-2" onclick="openAdd('${s.code}')">＋追加</button>`
+        }</td>
+      </tr>`;
+    }).join('') +
+    (list.length>LIMIT ? `<tr><td colspan="17" class="text-center text-muted small">他${list.length-LIMIT}件（検索で絞り込み）</td></tr>` : '');
+}
+
+// ════════════════════════════════════════
+//  フィルター & ソートドロップダウン
+// ════════════════════════════════════════
+const FILTERS = { stock:{}, port:{}, buy:{} };
+let FD = null; // {table, col, th}
+
+const NUM_COLS = new Set([
+  'price','dividendAmount','dividendYield','per','pbr','roe','roa','operatingMargin','payoutRatio','equityRatio','marketCap',
+  'shares','acqPrice','eval','plPct','bookY','curY',
+  'score','yPt','rPt','dPt'
+]);
+
+function applyFilters(items, table, getVal) {
+  const fs = FILTERS[table] || {};
+  return items.filter(item => {
+    for (const [col, f] of Object.entries(fs)) {
+      const v = getVal(item, col);
+      if (f.type === 'values') {
+        if (!f.values.has(String(v ?? ''))) return false;
+      } else if (f.type === 'range') {
+        const n = +v || 0;
+        if (f.min !== null && n < f.min) return false;
+        if (f.max !== null && n > f.max) return false;
+      }
+    }
+    return true;
+  });
+}
+
+function colUniqueValues(table, col) {
+  if (table === 'stock')
+    return [...new Set(ST.stocks.map(s => String(s[col] ?? '')))];
+  if (table === 'port')
+    return [...new Set(ST.portfolio.map(p => {
+      const s = ST.stocks.find(s => s.code === p.code);
+      if (col==='account') return String(p.account||'');
+      if (col==='code')    return String(p.code||'');
+      if (col==='name')    return String(s?.name||'');
+      if (col==='sector')  return String(s?.sector||'');
+      if (col==='rank')    return String(getStockRank(p.code)||'');
+      return '';
+    }))];
+  if (table === 'buy') {
+    const minYield = +document.getElementById('fMinYield').value || 2;
+    return [...new Set(ST.stocks
+      .map(s => ({...s, sc:calcScore(s.code), p:ST.portfolio.find(p=>p.code===s.code)}))
+      .filter(s => s.sc && s.sc.total>0 && getYield(s)>=minYield)
+      .map(s => {
+        if (col==='sector') return String(s.sector||'');
+        if (col==='rank')   return String(getStockRank(s.code)||'');
+        return '';
+      }))];
+  }
+  return [];
+}
+
+function updateFdIndicators(table) {
+  document.querySelectorAll(`th.sortable[data-sort="${table}"]`).forEach(th => {
+    const hasF = !!(FILTERS[table]?.[th.dataset.col]);
+    th.classList.toggle('has-filter', hasF);
+    const icon = th.querySelector('.fd-icon');
+    if (icon) icon.textContent = hasF ? '🔽' : '▽';
+  });
+}
+
+function openFd(th, e) {
+  e.stopPropagation();
+  const fd = document.getElementById('fd-panel');
+  if (FD?.th === th) { closeFd(); return; }
+
+  const table = th.dataset.sort, col = th.dataset.col;
+  FD = { table, col, th };
+
+  const isNum = NUM_COLS.has(col);
+  document.getElementById('fd-num').classList.toggle('d-none', !isNum);
+  document.getElementById('fd-val').classList.toggle('d-none',  isNum);
+
+  const f = FILTERS[table]?.[col];
+  if (isNum) {
+    document.getElementById('fd-min').value = f?.min ?? '';
+    document.getElementById('fd-max').value = f?.max ?? '';
+  } else {
+    const vals = colUniqueValues(table, col).sort((a,b) => a.localeCompare(b,'ja'));
+    const active = f?.values ?? null;
+    document.getElementById('fd-val-list').innerHTML = vals.map(v => {
+      const id = 'fdv_' + Math.random().toString(36).slice(2);
+      const chk = (!active || active.has(v)) ? 'checked' : '';
+      return `<div class="form-check">
+        <input class="form-check-input" type="checkbox" value="${v}" id="${id}" ${chk}>
+        <label class="form-check-label" for="${id}">${v||'(空白)'}</label>
+      </div>`;
+    }).join('');
+  }
+
+  const sort = table==='port' ? portSort : table==='buy' ? buySort : stockSort;
+  const sortedAsc  = sort.col===col && sort.dir===1;
+  const sortedDesc = sort.col===col && sort.dir===-1;
+  document.getElementById('fd-asc').className  = 'btn btn-sm w-50 ' + (sortedAsc  ? 'btn-secondary' : 'btn-outline-secondary');
+  document.getElementById('fd-desc').className = 'btn btn-sm w-50 ' + (sortedDesc ? 'btn-secondary' : 'btn-outline-secondary');
+
+  const rect = th.getBoundingClientRect();
+  fd.style.left = Math.max(4, Math.min(rect.left, window.innerWidth-240)) + 'px';
+  fd.style.top  = (rect.bottom + 4) + 'px';
+  fd.style.display = 'block';
+}
+
+function closeFd() {
+  document.getElementById('fd-panel').style.display = 'none';
+  FD = null;
+}
+
+function doSort(dir) {
+  if (!FD) return;
+  const {table, col, th} = FD;
+  if (table==='port')     { portSort.col=col;  portSort.dir=dir;  }
+  else if (table==='buy') { buySort.col=col;   buySort.dir=dir;   }
+  else                    { stockSort.col=col; stockSort.dir=dir; }
+  document.querySelectorAll(`th.sortable[data-sort="${table}"]`)
+    .forEach(t => t.classList.remove('sort-asc','sort-desc'));
+  th.classList.add(dir===1 ? 'sort-asc' : 'sort-desc');
+  closeFd();
+  if (table==='port')     renderPortfolio();
+  else if (table==='buy') renderBuy();
+  else                    renderStocks();
+}
+
+document.getElementById('fd-asc').addEventListener('click',  () => doSort( 1));
+document.getElementById('fd-desc').addEventListener('click', () => doSort(-1));
+
+document.getElementById('fd-all').addEventListener('click', e => {
+  e.preventDefault();
+  document.querySelectorAll('#fd-val-list input').forEach(cb => cb.checked=true);
+});
+document.getElementById('fd-none').addEventListener('click', e => {
+  e.preventDefault();
+  document.querySelectorAll('#fd-val-list input').forEach(cb => cb.checked=false);
+});
+
+document.getElementById('fd-apply').addEventListener('click', () => {
+  if (!FD) return;
+  const {table, col} = FD;
+  if (NUM_COLS.has(col)) {
+    const min = document.getElementById('fd-min').value;
+    const max = document.getElementById('fd-max').value;
+    if (!min && !max) delete FILTERS[table][col];
+    else FILTERS[table][col] = {type:'range', min:min?+min:null, max:max?+max:null};
+  } else {
+    const checked = [...document.querySelectorAll('#fd-val-list input:checked')].map(cb=>cb.value);
+    const total   =  document.querySelectorAll('#fd-val-list input').length;
+    if (checked.length===total) delete FILTERS[table][col];
+    else FILTERS[table][col] = {type:'values', values:new Set(checked)};
+  }
+  updateFdIndicators(table);
+  closeFd();
+  if (table==='port')     renderPortfolio();
+  else if (table==='buy') renderBuy();
+  else                    renderStocks();
+});
+
+document.getElementById('fd-reset').addEventListener('click', () => {
+  if (!FD) return;
+  const {table, col} = FD;
+  delete FILTERS[table][col];
+  updateFdIndicators(table);
+  closeFd();
+  if (table==='port')     renderPortfolio();
+  else if (table==='buy') renderBuy();
+  else                    renderStocks();
+});
+
+document.addEventListener('click', e => {
+  const fd = document.getElementById('fd-panel');
+  if (fd.style.display!=='none' && !fd.contains(e.target) && !e.target.closest('th.sortable'))
+    closeFd();
+});
+
+// th にアイコンとクリックハンドラを追加
+document.querySelectorAll('th.sortable').forEach(th => {
+  const icon = document.createElement('span');
+  icon.className = 'fd-icon';
+  icon.textContent = '▽';
+  th.appendChild(icon);
+  th.addEventListener('click', e => openFd(th, e));
+});
+
+// ════════════════════════════════════════
+//  RENDER: ポートフォリオ
+// ════════════════════════════════════════
+const RANK_ORDER = {'★':0,'●':1,'優待':2,'〇':3,'×':4,'':5};
+
+function renderPortfolio() {
+  const tbody = document.getElementById('portTbody');
+  if (!ST.portfolio.length) {
+    tbody.innerHTML = `<tr><td colspan="14" class="text-center text-muted py-4">
+      保有銘柄がありません。「週次レポートを読み込む」または「＋ 個別に追加」で登録してください。
+    </td></tr>`;
+    return;
+  }
+
+  // 計算値を付与してソート
+  const rows = ST.portfolio.map((p, origIdx) => {
+    const s      = ST.stocks.find(s=>s.code===p.code);
+    const price  = +s?.price         || 0;
+    const acq    = +p.acqPrice       || 0;
+    const sh     = +p.shares         || 0;
+    const divAmt = +s?.dividendAmount || 0;
+    const eval_  = price * sh;
+    const plPct  = acq>0&&price>0 ? (price/acq-1)*100 : null;
+    const bookY  = acq>0&&divAmt>0 ? divAmt/acq*100   : null;
+    const curY   = getYield(s);
+    return {p, s, price, acq, sh, divAmt, eval_, plPct, bookY, curY, origIdx};
+  });
+
+  // 列フィルタ適用
+  const filteredRows = applyFilters(rows, 'port', (row, col) => {
+    switch(col) {
+      case 'account':  return row.p.account  || '';
+      case 'code':     return row.p.code     || '';
+      case 'name':     return row.s?.name    || '';
+      case 'sector':   return row.s?.sector  || '';
+      case 'shares':   return row.sh;
+      case 'acqPrice': return row.acq;
+      case 'price':    return row.price;
+      case 'eval':     return row.eval_;
+      case 'plPct':    return row.plPct;
+      case 'bookY':    return row.bookY;
+      case 'curY':     return row.curY;
+      case 'rank':     return getStockRank(row.p.code) || '';
+      default: return '';
+    }
+  });
+
+  filteredRows.sort((a,b) => {
+    const col = portSort.col, dir = portSort.dir;
+    switch(col) {
+      case 'account': return dir * (a.p.account||'').localeCompare(b.p.account||'');
+      case 'code':    return dir * a.p.code.localeCompare(b.p.code);
+      case 'name':    return dir * (a.s?.name||'').localeCompare(b.s?.name||'');
+      case 'sector':  return dir * (a.s?.sector||'').localeCompare(b.s?.sector||'');
+      case 'shares':  return dir * (a.sh - b.sh);
+      case 'acqPrice':return dir * (a.acq - b.acq);
+      case 'price':   return dir * (a.price - b.price);
+      case 'eval':    return dir * (a.eval_ - b.eval_);
+      case 'plPct':   return dir * ((a.plPct??-Infinity) - (b.plPct??-Infinity));
+      case 'bookY':   return dir * ((a.bookY??-Infinity) - (b.bookY??-Infinity));
+      case 'curY':    return dir * (a.curY - b.curY);
+      case 'rank':    return dir * ((RANK_ORDER[getStockRank(a.p.code)]??5) - (RANK_ORDER[getStockRank(b.p.code)]??5));
+      default: return 0;
+    }
+  });
+
+  tbody.innerHTML = filteredRows.map(({p,s,price,acq,sh,divAmt,eval_,plPct,bookY,curY,origIdx}) => {
+    const plCls = plPct===null?'':(plPct>=0?'text-success':'text-danger');
+    return `<tr>
+      <td>${acctBadge(p.account)||'<span class="text-muted">-</span>'}</td>
+      <td><code>${p.code}</code></td>
+      <td>${s?.name||p.code}</td>
+      <td><small class="text-muted">${s?.sector||'-'}</small></td>
+      <td class="text-end">${fN(sh)}</td>
+      <td class="text-end">${fN(acq,2)}</td>
+      <td class="text-end">${price?fN(price):'-'}</td>
+      <td class="text-end">${eval_>0?'¥'+fN(Math.round(eval_)):'-'}</td>
+      <td class="text-end fw-bold ${plCls}">${plPct!==null?fPL(plPct):'-'}</td>
+      <td class="text-end text-warning fw-bold">${bookY!==null?bookY.toFixed(2)+'%':'-'}</td>
+      <td class="text-end text-success">${curY?fY(curY):'-'}</td>
+      <td class="text-center">
+        <select class="form-select form-select-sm py-0 text-center" style="width:70px"
+                onchange="updateRank(${origIdx},this.value)">
+          <option value="" ${!getStockRank(p.code)?'selected':''}>-</option>
+          <option value="★" ${getStockRank(p.code)==='★'?'selected':''}>★</option>
+          <option value="●" ${getStockRank(p.code)==='●'?'selected':''}>●</option>
+          <option value="優待" ${getStockRank(p.code)==='優待'?'selected':''}>優待</option>
+          <option value="〇" ${getStockRank(p.code)==='〇'?'selected':''}>〇</option>
+          <option value="×" ${getStockRank(p.code)==='×'?'selected':''}>×</option>
+        </select>
+      </td>
+      <td>
+        <input type="text" class="form-control form-control-sm py-0" value="${p.comment||''}"
+               style="min-width:100px" placeholder="メモ"
+               onchange="updateComment(${origIdx},this.value)">
+      </td>
+      <td>
+        <button class="btn btn-sm btn-outline-warning py-0 me-1" onclick="openEdit(${origIdx})">編集</button>
+        <button class="btn btn-sm btn-outline-danger py-0" onclick="removePort(${origIdx})">削除</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ════════════════════════════════════════
+//  RENDER: 買い候補
+// ════════════════════════════════════════
+function renderBuy() {
+  const minScore = +document.getElementById('fMinScore').value || 55;
+  const minYield = +document.getElementById('fMinYield').value || 2;
+  const rankF    = document.getElementById('fRank').value;
+  const sectorF  = document.getElementById('fSector').value;
+
+  const sectors = [...new Set(ST.stocks.map(s=>s.sector).filter(Boolean))].sort();
+  const fCur = document.getElementById('fSector').value;
+  document.getElementById('fSector').innerHTML = '<option value="">全業種</option>' +
+    sectors.map(s=>`<option${s===fCur?' selected':''}>${s}</option>`).join('');
+
+  const scored = ST.stocks
+    .map(s => ({...s, sc:calcScore(s.code), p:ST.portfolio.find(p=>p.code===s.code)}))
+    .filter(s => {
+      if (!s.sc || s.sc.total<=0) return false;
+      if (getYield(s) < minYield) return false;
+      if (s.sc.total < minScore-15) return false;
+      if (sectorF && s.sector!==sectorF) return false;
+      if (rankF) {
+        const r = getStockRank(s.code);
+        if (rankF==='unrated' && r!=='') return false;
+        if (rankF==='★'    && r!=='★') return false;
+        if (rankF==='優待'  && r!=='優待') return false;
+        if (rankF==='★●'   && !['★','●'].includes(r)) return false;
+        if (rankF==='★●〇' && !['★','●','優待','〇',''].includes(r)) return false;
+      }
+      return true;
+    });
+
+  // 列フィルタ適用
+  const filteredScored = applyFilters(scored, 'buy', (s, col) => {
+    const bY = (s.p&&+s.p.acqPrice>0&&+s.dividendAmount>0)
+      ? +s.dividendAmount/+s.p.acqPrice*100 : null;
+    switch(col) {
+      case 'code':   return s.code;
+      case 'name':   return s.name || '';
+      case 'sector': return s.sector || '';
+      case 'price':  return s.price || 0;
+      case 'curY':   return getYield(s);
+      case 'bookY':  return bY;
+      case 'rank':   return getStockRank(s.code);
+      case 'yPt':    return s.sc.yPt;
+      case 'rPt':    return s.sc.rPt;
+      case 'dPt':    return s.sc.dPt;
+      case 'score':  return s.sc.total;
+      case 'per':    return s.per || 0;
+      case 'pbr':    return s.pbr || 0;
+      case 'roe':    return s.roe || 0;
+      default: return '';
+    }
+  });
+
+  // 買い候補ソート
+  filteredScored.sort((a,b) => {
+    const col = buySort.col, dir = buySort.dir;
+    const bookY = s => (s.p&&+s.p.acqPrice>0&&+s.dividendAmount>0)
+      ? +s.dividendAmount/+s.p.acqPrice*100 : -Infinity;
+    switch(col) {
+      case 'code':   return dir * a.code.localeCompare(b.code);
+      case 'name':   return dir * (a.name||'').localeCompare(b.name||'');
+      case 'sector': return dir * (a.sector||'').localeCompare(b.sector||'');
+      case 'price':  return dir * ((+a.price||0)-(+b.price||0));
+      case 'curY':   return dir * (getYield(a)-getYield(b));
+      case 'bookY':  return dir * (bookY(a)-bookY(b));
+      case 'rank':   return dir * ((RANK_ORDER[getStockRank(a.code)]??5)-(RANK_ORDER[getStockRank(b.code)]??5));
+      case 'yPt':    return dir * (a.sc.yPt-b.sc.yPt);
+      case 'rPt':    return dir * (a.sc.rPt-b.sc.rPt);
+      case 'dPt':    return dir * (a.sc.dPt-b.sc.dPt);
+      case 'per':    return dir * ((+a.per||0)-(+b.per||0));
+      case 'pbr':    return dir * ((+a.pbr||0)-(+b.pbr||0));
+      case 'roe':    return dir * ((+a.roe||0)-(+b.roe||0));
+      default:       return dir * (a.sc.total-b.sc.total); // score
+    }
+  });
+
+  const tbody = document.getElementById('buyTbody');
+  if (!filteredScored.length) {
+    tbody.innerHTML = `<tr><td colspan="16" class="text-center text-muted py-4">条件に合う銘柄がありません</td></tr>`;
+    return;
+  }
+
+  const rowHtml = (s, i) => {
+    const rank  = getStockRank(s.code);
+    const bookY = s.p&&+s.p.acqPrice>0&&+s.dividendAmount>0
+      ? (+s.dividendAmount/+s.p.acqPrice*100).toFixed(2)+'%' : '-';
+    const col   = scoreColor(s.sc.total);
+    const flag  = s.sc.isBuy
+      ? '<span class="buy-flag">🟢 BUY</span>'
+      : s.sc.isWatch ? '<span class="watch-flag">🟡 WATCH</span>' : '';
+    const rankSel = (v) => `<option value="${v}" ${rank===v?'selected':''}>${v||'-'}</option>`;
+    const selHtml = `<select class="form-select form-select-sm py-0 text-center" style="width:72px"
+        onchange="updateStockRank('${s.code}',this.value)">
+        ${rankSel('')}${rankSel('★')}${rankSel('●')}${rankSel('優待')}${rankSel('〇')}${rankSel('×')}
+      </select>`;
+    return { rank, bookY, col, flag, selHtml };
+  };
+
+  tbody.innerHTML = filteredScored.map((s,i)=>{
+    const {bookY,col,flag,selHtml} = rowHtml(s,i);
+    return `<tr class="${i<3?'table-warning':''}">
+      <td>${i+1}</td><td><code>${s.code}</code></td><td>${s.name||'-'}</td>
+      <td><small class="text-muted">${s.sector||'-'}</small></td>
+      <td class="text-end">${fN(s.price)}</td>
+      <td class="text-end fw-bold text-success">${fY(getYield(s))}</td>
+      <td class="text-end text-warning">${bookY}</td>
+      <td class="text-center">${selHtml}</td>
+      <td class="text-end">${s.sc.yPt}</td>
+      <td class="text-end">${s.sc.rPt}</td>
+      <td class="text-end">${s.sc.dPt}</td>
+      <td class="text-center">
+        <span class="fw-bold" style="color:${col}">${s.sc.total}</span>
+        <div class="score-bar-wrap ms-1">
+          <div class="score-bar-fill" style="width:${s.sc.total}%;background:${col}"></div>
+        </div>
+      </td>
+      <td class="text-end">${fN(s.per,1)}</td>
+      <td class="text-end">${fN(s.pbr,2)}</td>
+      <td class="text-end">${fN(s.roe,1)}</td>
+      <td class="text-center">${flag}</td>
+    </tr>`;
+  }).join('');
+
+  // スマホ用カード
+  document.getElementById('buyCards').innerHTML = filteredScored.map((s,i)=>{
+    const {rank, bookY, col, flag, selHtml} = rowHtml(s,i);
+    const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}.`;
+    return `<div class="buy-card${i<3?' border border-warning':''}">
+      <div class="d-flex justify-content-between align-items-start mb-1">
+        <div>
+          <span class="text-muted me-1">${medal}</span>
+          <strong>${s.name||'-'}</strong>
+          <code class="ms-1 text-muted small">${s.code}</code>
+        </div>
+        <div class="buy-card-score" style="color:${col}">${s.sc.total}</div>
+      </div>
+      <div class="text-muted small mb-2">${s.sector||'-'}</div>
+      <div class="d-flex gap-3 mb-2 small">
+        <span>株価 <strong>${fN(s.price)}</strong></span>
+        <span>利回り <strong class="text-success">${fY(getYield(s))}</strong></span>
+        <span>PER <strong>${fN(s.per,1)}</strong></span>
+      </div>
+      <div class="d-flex gap-2 mb-2 small text-muted">
+        <span>利回Pt: ${s.sc.yPt}</span>
+        <span>ランクPt: ${s.sc.rPt}</span>
+        <span>分散Pt: ${s.sc.dPt}</span>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <div class="buy-card-rank flex-grow-1">${selHtml}</div>
+        <div>${flag}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderAll() { renderDash(); renderStocks(); renderPortfolio(); renderBuy(); }
+
+// ════════════════════════════════════════
+//  ランク エクスポート / インポート
+// ════════════════════════════════════════
+function exportRanks() {
+  const data = JSON.stringify(ST.ranks, null, 2);
+  const blob = new Blob([data], {type:'application/json'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const date = new Date().toISOString().slice(0,10);
+  a.href = url; a.download = `ranks_${date}.json`;
+  a.click(); URL.revokeObjectURL(url);
+}
+
+function importRanks(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const imported = JSON.parse(e.target.result);
+      if (typeof imported !== 'object') throw new Error('invalid');
+      const count = Object.keys(imported).length;
+      if (!confirm(`${count}件のランクデータを読み込みます。\n既存データにマージ（上書き）します。`)) return;
+      ST.ranks = {...ST.ranks, ...imported};
+      ST.save();
+      renderAll();
+      alert(`✅ ${count}件のランクを読み込みました`);
+    } catch(err) {
+      alert('ファイルの読み込みに失敗しました');
+    }
+    input.value = '';
+  };
+  reader.readAsText(file);
+}
+
+// ════════════════════════════════════════
+//  ポートフォリオ CRUD
+// ════════════════════════════════════════
+let editIdx = -1;
+const modal = () => bootstrap.Modal.getOrCreateInstance(document.getElementById('modalAdd'));
+
+function openAdd(code='') {
+  editIdx = -1;
+  document.getElementById('modalTitle').textContent = '銘柄を追加';
+  document.getElementById('mCode').value = code;
+  document.getElementById('mShares').value = '';
+  document.getElementById('mAcqPrice').value = '';
+  document.getElementById('mComment').value = '';
+  document.getElementById('mAccount').value = '';
+  document.querySelectorAll('input[name=mRank]').forEach(r=>r.checked=false);
+  if (code) document.getElementById('mCode').dispatchEvent(new Event('input'));
+  modal().show();
+}
+
+function openEdit(idx) {
+  const p = ST.portfolio[idx];
+  editIdx = idx;
+  document.getElementById('modalTitle').textContent = '銘柄を編集';
+  document.getElementById('mCode').value = p.code;
+  document.getElementById('mShares').value = p.shares;
+  document.getElementById('mAcqPrice').value = p.acqPrice;
+  document.getElementById('mComment').value = p.comment||'';
+  document.getElementById('mAccount').value = p.account||'';
+  document.querySelectorAll('input[name=mRank]').forEach(r=>r.checked=r.value===getStockRank(p.code));
+  document.getElementById('mCode').dispatchEvent(new Event('input'));
+  modal().show();
+}
+
+document.getElementById('mCode').addEventListener('input', function() {
+  const raw  = this.value.trim();
+  const code = /^\d/.test(raw) ? raw.padStart(4,'0') : raw.toUpperCase();
+  const s    = ST.stocks.find(s=>s.code===code);
+  document.getElementById('mStockName').textContent =
+    s ? `${s.name}（${s.sector}）` : raw.length>=2?'（銘柄データに見つかりません）':'';
+});
+
+document.getElementById('btnSave').addEventListener('click', () => {
+  const raw  = document.getElementById('mCode').value.trim();
+  const code = /^\d/.test(raw) ? raw.padStart(4,'0') : raw.toUpperCase();
+  if (!code || code.length < 2) { alert('証券コードを入力してください'); return; }
+
+  const item = {
+    code,
+    account:  document.getElementById('mAccount').value,
+    shares:   document.getElementById('mShares').value,
+    acqPrice: document.getElementById('mAcqPrice').value,
+    rank:     document.querySelector('input[name=mRank]:checked')?.value||'',
+    comment:  document.getElementById('mComment').value,
+  };
+
+  if (editIdx >= 0) {
+    ST.portfolio[editIdx] = item;
+  } else {
+    const ex = ST.portfolio.findIndex(p=>p.code===code);
+    if (ex >= 0) {
+      if (!confirm(`${code} はすでに登録されています。上書きしますか？`)) return;
+      ST.portfolio[ex] = item;
+    } else {
+      ST.portfolio.push(item);
+    }
+  }
+  // ST.ranks に評価ランクを反映
+  if (item.rank) ST.ranks[item.code] = item.rank;
+  else delete ST.ranks[item.code];
+  ST.save();
+  modal().hide();
+  renderAll();
+});
+
+document.getElementById('btnAdd').addEventListener('click', ()=>openAdd());
+document.getElementById('btnClearPort').addEventListener('click', ()=>{
+  if (confirm('全保有銘柄を削除しますか？')) { ST.portfolio=[]; ST.save(); renderAll(); }
+});
+function updateRank(i, v) {
+  const code = ST.portfolio[i].code;
+  ST.portfolio[i].rank = v || null;
+  ST.ranks[code] = v || null;  // null = 手動で「−」を選択（auto-exclude を上書き）
+  ST.save(); renderAll();
+}
+function updateStockRank(code, v) {
+  ST.ranks[code] = v || null;  // null = 手動で「−」を選択（auto-exclude を上書き）
+  // ポートフォリオに同コードがあれば同期
+  const pi = ST.portfolio.findIndex(p => p.code === code);
+  if (pi >= 0) ST.portfolio[pi].rank = v || null;
+  ST.save();
+  renderStocks(); renderBuy();
+}
+function updateComment(i,v) { ST.portfolio[i].comment=v; ST.save(); }
+function removePort   (i)   {
+  if (confirm('削除しますか？')) { ST.portfolio.splice(i,1); ST.save(); renderAll(); }
+}
+
+// ════════════════════════════════════════
+//  CSV エクスポート
+// ════════════════════════════════════════
+function toCSV(rows) {
+  return '﻿' + rows.map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+}
+function dlCSV(csv, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download = name; a.click();
+}
+
+document.getElementById('btnExportPort').addEventListener('click', ()=>{
+  const hdr = ['口座','コード','銘柄名','業種','保有株数','取得単価','現在株価','評価額','損益率','簿価利回り','現在利回り','年間配当','評価ランク','コメント'];
+  const rows = ST.portfolio.map(p=>{
+    const s=ST.stocks.find(s=>s.code===p.code);
+    const px=+s?.price||0, acq=+p.acqPrice||0, sh=+p.shares||0;
+    return [p.account||'', p.code, s?.name||'', s?.sector||'', sh, acq,
+            px||'', px?Math.round(px*sh):'',
+            acq&&px?((px/acq-1)*100).toFixed(1)+'%':'',
+            acq&&+s?.dividendAmount?(+s.dividendAmount/acq*100).toFixed(2)+'%':'',
+            getYield(s)>0?getYield(s).toFixed(2)+'%':'',
+            +s?.dividendAmount&&sh?Math.round(+s.dividendAmount*sh):'',
+            getStockRank(p.code)||'', p.comment||''];
+  });
+  dlCSV(toCSV([hdr,...rows]), `portfolio_${new Date().toISOString().slice(0,10)}.csv`);
+});
+
+document.getElementById('btnExportBuy').addEventListener('click', ()=>{
+  const minScore = +document.getElementById('fMinScore').value||55;
+  const minYield = +document.getElementById('fMinYield').value||2;
+  const hdr = ['順位','コード','銘柄名','業種','株価','配当利回り','評価ランク','利回Pt','ランクPt','分散Pt','総合スコア','判定','PER','PBR','ROE'];
+  const rows = ST.stocks
+    .map(s=>({...s,sc:calcScore(s.code),p:ST.portfolio.find(p=>p.code===s.code)}))
+    .filter(s=>s.sc&&s.sc.total>=minScore-15&&getYield(s)>=minYield)
+    .sort((a,b)=>b.sc.total-a.sc.total)
+    .map((s,i)=>[i+1,s.code,s.name||'',s.sector||'',s.price||'',
+                 getYield(s)>0?getYield(s).toFixed(2)+'%':'',
+                 getStockRank(s.code)||'未評価',s.sc.yPt,s.sc.rPt,s.sc.dPt,s.sc.total,
+                 s.sc.isBuy?'BUY':s.sc.isWatch?'WATCH':'',
+                 s.per||'',s.pbr||'',s.roe||'']);
+  dlCSV(toCSV([hdr,...rows]), `buy_candidates_${new Date().toISOString().slice(0,10)}.csv`);
+});
+
+// ════════════════════════════════════════
+//  イベント
+// ════════════════════════════════════════
+document.getElementById('sSearch').addEventListener('input',  renderStocks);
+document.getElementById('sSector').addEventListener('change', renderStocks);
+document.getElementById('sMarket').addEventListener('change', renderStocks);
+document.getElementById('btnRefresh').addEventListener('click', renderBuy);
+document.querySelectorAll('[data-bs-toggle="tab"]').forEach(t =>
+  t.addEventListener('shown.bs.tab', e => {
+    const tgt = e.target.dataset.bsTarget;
+    if      (tgt==='#tab-dash')      renderDash();
+    else if (tgt==='#tab-stocks')    renderStocks();
+    else if (tgt==='#tab-portfolio') renderPortfolio();
+    else if (tgt==='#tab-buy')       renderBuy();
+  })
+);
+
+// ════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════
+ST.load();
+
+// localhost以外ではCORS警告を表示
+if (!IS_LOCAL) {
+  document.getElementById('jqLocalWarning').classList.remove('d-none');
+}
+
+if (ST.stocks.length) {
+  document.getElementById('lastUpdated').textContent =
+    `登録済: ${ST.stocks.length.toLocaleString()}銘柄`;
+}
+renderAll();
+</script>
+</body>
+</html>
