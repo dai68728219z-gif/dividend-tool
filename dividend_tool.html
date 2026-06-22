@@ -481,9 +481,11 @@ th.has-filter .fd-icon { opacity:1; }
           </div>
           <div class="d-flex gap-2 mt-3">
             <button class="btn btn-outline-danger btn-sm" onclick="clearSync()">同期を解除</button>
+            <button class="btn btn-outline-secondary btn-sm" onclick="diagSync()">🔍 診断</button>
             <button class="btn btn-outline-primary btn-sm ms-auto" onclick="manualPull()">↓ 今すぐ取得</button>
             <button class="btn btn-primary btn-sm" onclick="manualPush()">↑ 今すぐ送信</button>
           </div>
+          <div id="syncDiagResult" class="mt-2 small" style="font-family:monospace;white-space:pre-wrap;max-height:200px;overflow-y:auto"></div>
         </div>
 
       </div>
@@ -2373,6 +2375,37 @@ async function setupSync() {
   } catch(e) {
     stEl.innerHTML = `<div class="alert alert-danger small py-1">エラー: ${e.message}</div>`;
     syncIndicator('error', e.message);
+  }
+}
+
+async function diagSync() {
+  const el = document.getElementById('syncDiagResult');
+  el.textContent = '診断中...';
+  try {
+    const res = await fetch(`https://api.github.com/gists/${SYNC.gistId}`, { headers: SYNC._headers() });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const gist = await res.json();
+    const text = gist.files?.['dividend_data.json']?.content;
+    if (!text) throw new Error('Gistにdividend_data.jsonがありません');
+    const remote = JSON.parse(text);
+    const localTs = localStorage.getItem('div_updated_at') || '(なし)';
+    const localStocks = ST.stocks.length;
+    const remoteStocks = (remote.stocks || []).length;
+    const autoExcluded = ST.stocks.filter(s => isAutoExcluded(s.code)).length;
+    const scored = ST.stocks.filter(s => { const sc = calcScore(s.code); return sc && sc.total > 0; }).length;
+    el.textContent =
+      `【Gist】\n` +
+      `  更新日時: ${remote.updatedAt || '不明'}\n` +
+      `  銘柄数:   ${remoteStocks}\n` +
+      `  PF数:     ${(remote.portfolio||[]).length}\n` +
+      `  ランク数: ${Object.keys(remote.ranks||{}).length}\n\n` +
+      `【ローカル】\n` +
+      `  更新日時: ${localTs}\n` +
+      `  銘柄数:   ${localStocks}\n` +
+      `  自動除外: ${autoExcluded}銘柄\n` +
+      `  スコア>0: ${scored}銘柄（買い候補候補）`;
+  } catch(e) {
+    el.textContent = 'エラー: ' + e.message;
   }
 }
 
