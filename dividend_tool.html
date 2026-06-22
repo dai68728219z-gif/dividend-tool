@@ -2219,7 +2219,7 @@ const SYNC = {
     });
   },
 
-  async pull() {
+  async pull(force = false) {
     if (!this.isReady()) return null;
     syncIndicator('loading');
     try {
@@ -2234,7 +2234,7 @@ const SYNC = {
       const localTs = localStorage.getItem('div_updated_at') || '';
 
       let changed = false;
-      if (!localTs || (remote.updatedAt && remote.updatedAt > localTs)) {
+      if (force || !localTs || (remote.updatedAt && remote.updatedAt > localTs)) {
         if (Array.isArray(remote.stocks) && remote.stocks.length) {
           ST.stocks = remote.stocks; changed = true;
           localStorage.setItem('div_stocks', JSON.stringify(ST.stocks));
@@ -2377,9 +2377,9 @@ async function setupSync() {
 }
 
 async function manualPull() {
-  const r = await SYNC.pull();
+  const r = await SYNC.pull(true);  // force=true: タイムスタンプ問わず強制取得
   if (r === 'updated') { renderAll(); showToast('Gistから取得・反映しました', 'success'); }
-  else if (r === 'same') showToast('ローカルデータが最新です', 'info');
+  else if (r === 'same') showToast('Gistにデータがありません', 'info');
   else showToast('同期に失敗しました', 'danger');
 }
 
