@@ -87,8 +87,11 @@ th.has-filter .fd-icon { opacity:1; }
     <span class="navbar-brand text-white fw-bold fs-5">📈 配当投資 意思決定ツール</span>
     <div class="d-flex gap-2 align-items-center ms-auto">
       <span class="text-white-50 small d-none d-md-inline" id="lastUpdated"></span>
-      <button class="btn btn-outline-light btn-sm" onclick="exportAll()" title="全データをJSONで保存（スマホ同期用）">💾 データ保存</button>
-      <label class="btn btn-outline-warning btn-sm mb-0" title="JSONを読み込む（スマホ同期用）">
+      <button id="syncBtn" class="btn btn-outline-secondary btn-sm" onclick="openSyncModal()" title="PC↔スマホ 自動同期">
+        ☁️ <span id="syncStatus"></span>
+      </button>
+      <button class="btn btn-outline-light btn-sm" onclick="exportAll()" title="全データをJSONで保存">💾 データ保存</button>
+      <label class="btn btn-outline-warning btn-sm mb-0" title="JSONを読み込む">
         📂 データ読込<input type="file" accept=".json" style="display:none" onchange="importAll(this)">
       </label>
     </div>
@@ -219,18 +222,63 @@ th.has-filter .fd-icon { opacity:1; }
       </div>
 
       <!-- xlsx import パネル -->
-      <div class="card p-3 mb-3">
+      <div class="card p-3 mb-2">
         <div class="d-flex gap-2 align-items-center flex-wrap">
           <label class="btn btn-primary btn-sm mb-0">
             📂 japan_stocks xlsxから読み込む
             <input type="file" id="xlsxInput" accept=".xlsx,.xls,.csv" hidden>
           </label>
-          <input type="text" class="form-control form-control-sm" id="sSearch" placeholder="コード・銘柄名検索..." style="max-width:200px">
-          <select class="form-select form-select-sm" id="sSector" style="max-width:180px"><option value="">全業種</option></select>
-          <select class="form-select form-select-sm" id="sMarket" style="max-width:140px">
-            <option value="">全市場</option><option>プライム</option><option>スタンダード</option><option>グロース</option>
-          </select>
           <span class="text-muted small ms-auto" id="stockCount">0件</span>
+        </div>
+      </div>
+      <!-- フィルターバー -->
+      <div class="card p-3 mb-3">
+        <div class="row g-2 align-items-end">
+          <div class="col-auto">
+            <label class="form-label small mb-1">コード・銘柄名</label>
+            <input type="text" class="form-control form-control-sm" id="sSearch" placeholder="検索..." style="width:160px">
+          </div>
+          <div class="col-auto">
+            <label class="form-label small mb-1">業種</label>
+            <select class="form-select form-select-sm" id="sSector" style="width:160px"><option value="">全業種</option></select>
+          </div>
+          <div class="col-auto">
+            <label class="form-label small mb-1">市場</label>
+            <select class="form-select form-select-sm" id="sMarket" style="width:130px">
+              <option value="">全市場</option><option>プライム</option><option>スタンダード</option><option>グロース</option>
+            </select>
+          </div>
+          <div class="col-auto">
+            <label class="form-label small mb-1">評価</label>
+            <select class="form-select form-select-sm" id="sRank" style="width:100px">
+              <option value="">全て</option>
+              <option value="★">★</option>
+              <option value="●">●</option>
+              <option value="優待">優待</option>
+              <option value="〇">〇</option>
+              <option value="×">×</option>
+              <option value="_none">未評価</option>
+            </select>
+          </div>
+          <div class="col-auto">
+            <label class="form-label small mb-1">利回り下限(%)</label>
+            <input type="number" class="form-control form-control-sm" id="sMinYield" value="" placeholder="例: 3" step="0.5" style="width:90px">
+          </div>
+          <div class="col-auto">
+            <label class="form-label small mb-1">ROE下限(%)</label>
+            <input type="number" class="form-control form-control-sm" id="sMinRoe" value="" placeholder="例: 10" style="width:80px">
+          </div>
+          <div class="col-auto">
+            <label class="form-label small mb-1">自己資本比率下限(%)</label>
+            <input type="number" class="form-control form-control-sm" id="sMinEqRatio" value="" placeholder="例: 40" style="width:80px">
+          </div>
+          <div class="col-auto">
+            <label class="form-label small mb-1">営業利益率下限(%)</label>
+            <input type="number" class="form-control form-control-sm" id="sMinOpMargin" value="" placeholder="例: 5" style="width:80px">
+          </div>
+          <div class="col-auto align-self-end">
+            <button class="btn btn-outline-secondary btn-sm" id="sBtnReset">リセット</button>
+          </div>
         </div>
       </div>
 
@@ -245,14 +293,11 @@ th.has-filter .fd-icon { opacity:1; }
               <th class="sortable text-end" data-sort="stock" data-col="price">株価</th>
               <th class="sortable text-end" data-sort="stock" data-col="dividendAmount">配当金</th>
               <th class="sortable text-end" data-sort="stock" data-col="dividendYield">利回り</th>
-              <th class="sortable text-end" data-sort="stock" data-col="per">PER</th>
-              <th class="sortable text-end" data-sort="stock" data-col="pbr">PBR</th>
               <th class="sortable text-end" data-sort="stock" data-col="roe">ROE</th>
-              <th class="sortable text-end" data-sort="stock" data-col="roa">ROA</th>
               <th class="sortable text-end" data-sort="stock" data-col="operatingMargin">営業利益率</th>
-              <th class="sortable text-end" data-sort="stock" data-col="payoutRatio">配当性向</th>
               <th class="sortable text-end" data-sort="stock" data-col="equityRatio">自己資本比率</th>
               <th class="sortable text-end" data-sort="stock" data-col="marketCap">時価総額</th>
+              <th class="sortable text-end" data-sort="stock" data-col="sales">売上高</th>
               <th class="sortable text-center" data-sort="stock" data-col="rank">評価</th>
               <th>操作</th>
             </tr></thead>
@@ -302,6 +347,8 @@ th.has-filter .fd-icon { opacity:1; }
               <th class="sortable text-end" data-sort="port" data-col="plPct">損益率</th>
               <th class="sortable text-end" data-sort="port" data-col="bookY">簿価利回り</th>
               <th class="sortable text-end" data-sort="port" data-col="curY">現在利回り</th>
+              <th class="sortable text-end" data-sort="port" data-col="annDiv">年間配当額</th>
+              <th class="text-center" title="チェックすると買い候補から除外されます">買い候補<br>保留</th>
               <th class="sortable text-center" data-sort="port" data-col="rank">評価ランク</th>
               <th>コメント</th><th></th>
             </tr></thead>
@@ -346,7 +393,7 @@ th.has-filter .fd-icon { opacity:1; }
       </div>
       <div class="card p-2 mb-2">
         <div class="small text-muted d-flex flex-wrap gap-3">
-          <span><b>スコア:</b> 配当利回りPt(0-40) ＋ 評価ランクPt(0-40) ＋ 業種分散Pt(0-20)</span>
+          <span><b>スコア:</b> 配当利回りPt(0-30) ＋ 評価ランクPt(0-40) ＋ 業種分散Pt(0-30)</span>
           <span>★=40pt ●=30pt 〇=20pt ×=除外 未評価=15pt</span>
         </div>
       </div>
@@ -361,15 +408,16 @@ th.has-filter .fd-icon { opacity:1; }
               <th class="sortable" data-sort="buy" data-col="sector">業種</th>
               <th class="sortable text-end" data-sort="buy" data-col="price">株価</th>
               <th class="sortable text-end" data-sort="buy" data-col="curY">現在利回り</th>
-              <th class="sortable text-end" data-sort="buy" data-col="bookY">簿価利回り</th>
+              <th class="sortable text-end" data-sort="buy" data-col="annDiv">年間配当額</th>
               <th class="sortable text-center" data-sort="buy" data-col="rank">評価</th>
               <th class="sortable text-end" data-sort="buy" data-col="yPt">利回Pt</th>
               <th class="sortable text-end" data-sort="buy" data-col="rPt">ランクPt</th>
               <th class="sortable text-end" data-sort="buy" data-col="dPt">分散Pt</th>
               <th class="sortable text-center" data-sort="buy" data-col="score">総合スコア</th>
-              <th class="sortable text-end" data-sort="buy" data-col="per">PER</th>
-              <th class="sortable text-end" data-sort="buy" data-col="pbr">PBR</th>
               <th class="sortable text-end" data-sort="buy" data-col="roe">ROE</th>
+              <th class="sortable text-end" data-sort="buy" data-col="marketCap">時価総額</th>
+              <th class="sortable text-end" data-sort="buy" data-col="equityRatio">自己資本比率</th>
+              <th class="sortable text-end" data-sort="buy" data-col="operatingMargin">営業利益率</th>
               <th class="text-center">判定</th>
             </tr></thead>
             <tbody id="buyTbody"></tbody>
@@ -384,6 +432,69 @@ th.has-filter .fd-icon { opacity:1; }
 </div>
 
 <!-- ══ モーダル ══ -->
+<!-- ════ GitHub Gist 同期モーダル ════ -->
+<div class="modal fade" id="modalSync" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header" style="background:linear-gradient(135deg,#0d6efd,#0dcaf0);color:#fff">
+        <h5 class="modal-title">☁️ PC↔スマホ 自動同期</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+
+        <!-- ── セットアップ画面 ── -->
+        <div id="syncSetupView">
+          <div class="alert alert-info small py-2 mb-3">
+            <strong>GitHub Gist で自動同期します</strong><br>
+            ① PCでトークンを入力して「Gistを新規作成」→ Gist IDが発行されます<br>
+            ② スマホで同じトークン＋Gist IDを入力 → 同期開始
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-bold small">GitHub Personal Access Token</label>
+            <input type="password" class="form-control font-monospace form-control-sm" id="syncTokenInput" placeholder="ghp_xxxx...">
+            <div class="form-text">
+              GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)<br>
+              スコープ: <code>gist</code> のみ
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-bold small">
+              Gist ID
+              <span class="text-muted fw-normal">（2台目は空欄にせずPCのIDを入力）</span>
+            </label>
+            <input type="text" class="form-control font-monospace form-control-sm" id="syncGistIdInput" placeholder="空欄 = 新規作成（初回のみ）">
+          </div>
+          <div id="syncSetupStatus"></div>
+        </div>
+
+        <!-- ── 設定済み画面 ── -->
+        <div id="syncReadyView" class="d-none">
+          <div class="alert alert-success small py-2">
+            <strong>✅ 同期が有効です</strong>　データを保存するたびに自動でGistに書き込まれます
+          </div>
+          <div class="mb-2">
+            <label class="form-label fw-bold small">Gist ID（他デバイスにコピーして入力）</label>
+            <div class="input-group input-group-sm">
+              <input type="text" class="form-control font-monospace" id="syncGistIdDisplay" readonly>
+              <button class="btn btn-outline-secondary" onclick="navigator.clipboard.writeText(document.getElementById('syncGistIdDisplay').value).then(()=>showToast('コピーしました','info'))">コピー</button>
+            </div>
+          </div>
+          <div class="d-flex gap-2 mt-3">
+            <button class="btn btn-outline-danger btn-sm" onclick="clearSync()">同期を解除</button>
+            <button class="btn btn-outline-primary btn-sm ms-auto" onclick="manualPull()">↓ 今すぐ取得</button>
+            <button class="btn btn-primary btn-sm" onclick="manualPush()">↑ 今すぐ送信</button>
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-footer" id="syncModalFooter">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+        <button class="btn btn-primary" onclick="setupSync()">同期を開始</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal fade" id="modalAdd" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -511,16 +622,37 @@ const ST = {
   portfolio: [],
   // 全銘柄の評価ランク {code: rank} （ポートフォリオ外銘柄も含む）
   ranks: {},
+  // 買い候補保留フラグ {code: true} （ポートフォリオ銘柄のみ）
+  paused: {},
   save() {
     localStorage.setItem('div_stocks',    JSON.stringify(this.stocks));
     localStorage.setItem('div_portfolio', JSON.stringify(this.portfolio));
     localStorage.setItem('div_ranks',     JSON.stringify(this.ranks));
+    localStorage.setItem('div_paused',    JSON.stringify(this.paused));
+    localStorage.setItem('div_updated_at', new Date().toISOString());
+    // GitHub Gist 自動プッシュ（fire-and-forget）
+    if (typeof SYNC !== 'undefined' && SYNC.isReady()) SYNC.push().catch(()=>{});
+    // localhost経由の場合: 保有データを holdings.json に自動保存
+    if (typeof IS_LOCAL !== 'undefined' && IS_LOCAL && this.portfolio.length > 0) {
+      const holdings = this.portfolio.map(p => ({
+        code:     p.code,
+        account:  p.account || '',
+        shares:   p.shares  || 0,
+        acqPrice: p.acqPrice || 0,
+      }));
+      fetch('/api/save-holdings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(holdings),
+      }).catch(() => {});  // エラーは無視
+    }
   },
   load() {
     try {
       const s = localStorage.getItem('div_stocks');
       const p = localStorage.getItem('div_portfolio');
       const r = localStorage.getItem('div_ranks');
+      const z = localStorage.getItem('div_paused');
       if (s) {
         this.stocks = JSON.parse(s);
         // 旧データの利回り100倍エラーを修正
@@ -528,7 +660,8 @@ const ST = {
           if (st.dividendYield != null) st.dividendYield = normalizeYield(st.dividendYield);
         });
       }
-      if (r) this.ranks = JSON.parse(r);
+      if (r) this.ranks  = JSON.parse(r);
+      if (z) this.paused = JSON.parse(z);
       if (p) {
         this.portfolio = JSON.parse(p);
         // マイグレーション: 旧形式の portfolio.rank を ST.ranks に移行
@@ -543,10 +676,9 @@ const ST = {
 // japan_stocks xlsx 列マッピング
 const COL_MAP = {
   '証券コード':'code','銘柄名':'name','33業種区分':'sector','市場区分':'market',
-  '現在株価':'price','年間配当金(円)':'dividendAmount','配当利回り(%)':'dividendYield',
-  'PER(実績)':'per','PBR':'pbr','ROE(%)':'roe','時価総額':'marketCap',
-  'ROA(%)':'roa','営業利益率(%)':'operatingMargin','配当性向(%)':'payoutRatio',
-  '自己資本比率(%)':'equityRatio',
+  '現在株価':'price','配当金(円)':'dividendAmount','配当利回り(%)':'dividendYield',
+  'ROE(%)':'roe','時価総額':'marketCap','営業利益率(%)':'operatingMargin',
+  '自己資本比率(%)':'equityRatio','売上高':'sales',
 };
 
 // 口座名 → CSSクラス
@@ -837,186 +969,224 @@ document.getElementById('btnJQClear').addEventListener('click', () => {
 // ════════════════════════════════════════
 //  japan_stocks xlsx インポート
 // ════════════════════════════════════════
+// silent=true: ダイアログなし（自動読み込み用）
+function processStocksXlsx(arrayBuffer, filename, silent) {
+  try {
+    const wb   = XLSX.read(arrayBuffer, {type:'array'});
+    const name = wb.SheetNames.includes('全銘柄一覧') ? '全銘柄一覧' : wb.SheetNames[0];
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], {header:1, defval:''});
+
+    let hIdx = -1;
+    for (let i = 0; i < Math.min(rows.length, 8); i++) {
+      if (rows[i].some(v => String(v).trim() === '証券コード')) { hIdx = i; break; }
+    }
+    if (hIdx < 0) { if (!silent) alert('「証券コード」列が見つかりません'); return; }
+
+    const headers = rows[hIdx].map(h => String(h).trim());
+    const newStocks = rows.slice(hIdx + 1)
+      .filter(r => r.some(v => v !== ''))
+      .map(r => {
+        const obj = {};
+        headers.forEach((h, i) => { const k = COL_MAP[h]; if (k) obj[k] = r[i]; });
+        obj.code = String(obj.code ?? '').replace(/\.0$/, '').padStart(4,'0');
+        const _div = +obj.dividendAmount || 0;
+        const _px  = +obj.price || 0;
+        if (_div > 0 && _px > 0) {
+          obj.dividendYield = Math.round(_div / _px * 10000) / 100;
+        } else {
+          obj.dividendYield = normalizeYield(obj.dividendYield);
+        }
+        const _exist = ST.stocks.find(s => s.code === obj.code);
+        if (_exist && isJapanese(_exist.name) && !isJapanese(String(obj.name||''))) {
+          obj.name = _exist.name;
+        }
+        return obj;
+      })
+      .filter(s => /^\d{4}$/.test(s.code));
+
+    // Keep non-JP stocks (AGG/VYM)
+    ST.stocks.filter(s => !/^\d{4}$/.test(s.code)).forEach(s => {
+      if (!newStocks.find(n => n.code === s.code)) newStocks.push(s);
+    });
+
+    ST.stocks = newStocks;
+    ST.save();
+    document.getElementById('lastUpdated').textContent = silent
+      ? `🔄 自動読み込み: ${filename}（${newStocks.length.toLocaleString()}銘柄）`
+      : `xlsx更新: ${new Date().toLocaleString('ja-JP')} | ${newStocks.length.toLocaleString()}銘柄`;
+    renderAll();
+    if (!silent) alert(`✅ ${newStocks.length.toLocaleString()}銘柄を読み込みました`);
+  } catch(err) {
+    if (!silent) alert('読み込みエラー: ' + err.message);
+    else console.error('[auto-load stocks]', err);
+  }
+}
+
 document.getElementById('xlsxInput').addEventListener('change', function(e) {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = ev => {
-    try {
-      const wb   = XLSX.read(ev.target.result, {type:'array'});
-      const name = wb.SheetNames.includes('全銘柄一覧') ? '全銘柄一覧' : wb.SheetNames[0];
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], {header:1, defval:''});
-
-      let hIdx = -1;
-      for (let i = 0; i < Math.min(rows.length, 8); i++) {
-        if (rows[i].some(v => String(v).trim() === '証券コード')) { hIdx = i; break; }
-      }
-      if (hIdx < 0) { alert('「証券コード」列が見つかりません'); return; }
-
-      const headers = rows[hIdx].map(h => String(h).trim());
-      const newStocks = rows.slice(hIdx + 1)
-        .filter(r => r.some(v => v !== ''))
-        .map(r => {
-          const obj = {};
-          headers.forEach((h, i) => { const k = COL_MAP[h]; if (k) obj[k] = r[i]; });
-          obj.code = String(obj.code ?? '').replace(/\.0$/, '').padStart(4,'0');
-          // 配当金÷株価で計算（保存値の形式に依存しない）
-          const _div = +obj.dividendAmount || 0;
-          const _px  = +obj.price || 0;
-          if (_div > 0 && _px > 0) {
-            obj.dividendYield = Math.round(_div / _px * 10000) / 100;
-          } else {
-            obj.dividendYield = normalizeYield(obj.dividendYield);
-          }
-          // 銘柄名: 既存に日本語名があれば xlsx の英語名で上書きしない
-          const _exist = ST.stocks.find(s => s.code === obj.code);
-          if (_exist && isJapanese(_exist.name) && !isJapanese(String(obj.name||''))) {
-            obj.name = _exist.name;
-          }
-          return obj;
-        })
-        .filter(s => /^\d{4}$/.test(s.code));
-
-      // Keep non-JP stocks (AGG/VYM)
-      ST.stocks.filter(s => !/^\d{4}$/.test(s.code)).forEach(s => {
-        if (!newStocks.find(n => n.code === s.code)) newStocks.push(s);
-      });
-
-      ST.stocks = newStocks;
-      ST.save();
-      document.getElementById('lastUpdated').textContent =
-        `xlsx更新: ${new Date().toLocaleString('ja-JP')} | ${ST.stocks.length.toLocaleString()}銘柄`;
-      renderAll();
-      alert(`✅ ${newStocks.length.toLocaleString()}銘柄を読み込みました`);
-    } catch(err) { alert('読み込みエラー: ' + err.message); }
-  };
+  reader.onload = ev => processStocksXlsx(ev.target.result, file.name, false);
   reader.readAsArrayBuffer(file);
   e.target.value = '';
 });
+
+// ── 起動時に最新銘柄データを自動読み込み（localhost のみ）──
+// 同じファイルが既にロード済みの場合はスキップして高速起動
+async function autoLoadStocks() {
+  if (!IS_LOCAL) return;
+  try {
+    const infoRes = await fetch('/api/stocks-info');
+    if (!infoRes.ok) return;
+    const {filename} = await infoRes.json();
+    const lastLoaded = localStorage.getItem('div_last_stocks_file') || '';
+    if (filename === lastLoaded && ST.stocks.length > 0) return; // スキップ
+    const res = await fetch('/api/latest-stocks');
+    if (!res.ok) return;
+    const buf = await res.arrayBuffer();
+    processStocksXlsx(buf, filename, true);
+    localStorage.setItem('div_last_stocks_file', filename);
+  } catch(e) { /* サーバー未起動などは無視 */ }
+}
 
 // ════════════════════════════════════════
 //  週次レポート xlsx インポート（ポートフォリオ）
 // ════════════════════════════════════════
-document.getElementById('reportXlsxInput').addEventListener('change', function(e) {
-  const file = e.target.files[0];
-  if (!file) return;
+// ── ポートフォリオ xlsx 共通処理 ──────────────────────
+// silent=true: 確認ダイアログなしで上書き（自動読み込み用）
+function processPortfolioXlsx(arrayBuffer, filename, silent) {
   const statusEl = document.getElementById('reportStatus');
-  statusEl.textContent = '読み込み中...';
+  try {
+    const wb = XLSX.read(arrayBuffer, {type:'array'});
+    const sheetName = wb.SheetNames.includes('全銘柄一覧') ? '全銘柄一覧' : wb.SheetNames[0];
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {header:1, defval:''});
 
-  const reader = new FileReader();
-  reader.onload = ev => {
-    try {
-      const wb = XLSX.read(ev.target.result, {type:'array'});
-      const sheetName = wb.SheetNames.includes('全銘柄一覧') ? '全銘柄一覧' : wb.SheetNames[0];
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {header:1, defval:''});
+    // ヘッダー行検出
+    let hIdx = -1;
+    for (let i = 0; i < Math.min(rows.length, 10); i++) {
+      if (rows[i].some(v => /コード/.test(String(v)))) { hIdx = i; break; }
+    }
+    if (hIdx < 0) { statusEl.textContent = '⚠️ ヘッダーが見つかりません'; return; }
 
-      // ヘッダー行検出
-      let hIdx = -1;
-      for (let i = 0; i < Math.min(rows.length, 10); i++) {
-        if (rows[i].some(v => /コード/.test(String(v)))) { hIdx = i; break; }
+    const headers = rows[hIdx].map(h => String(h).trim());
+    const ci = keyword => headers.findIndex(h => h.includes(keyword));
+
+    const COL = {
+      acct: ci('口座'),
+      code: ci('コード'),
+      name: ci('銘柄名'),
+      sec:  ci('業種'),
+      sh:   ci('保有数'),
+      acq:  ci('平均購入価格'),
+      cur:  ci('現在価格'),
+      div:  ci('1株配当'),
+      yld:  ci('表面配当利回り'),
+    };
+
+    const toNum = v => parseFloat(String(v ?? '').replace(/[,円%－\-]/g,'').trim()) || 0;
+    const newItems = [];
+
+    for (const row of rows.slice(hIdx + 1)) {
+      const rawCode = String(row[COL.code] ?? '').replace(/\.0$/, '').trim();
+      if (!rawCode || rawCode.length < 2 ||
+          rawCode.includes('合計') || rawCode.includes('口座') || rawCode === '-') continue;
+
+      const code     = /^\d/.test(rawCode) ? rawCode.padStart(4,'0') : rawCode.toUpperCase();
+      const shares   = toNum(row[COL.sh]);
+      const acqPrice = toNum(row[COL.acq]);
+      if (shares <= 0 && acqPrice <= 0) continue;
+
+      const price    = toNum(row[COL.cur]);
+      const divAmt   = toNum(row[COL.div]);
+      let   yldVal   = toNum(row[COL.yld]);
+      const sec      = String(row[COL.sec]  ?? '').trim();
+      const name     = String(row[COL.name] ?? '').trim();
+      const acct     = COL.acct >= 0 ? String(row[COL.acct] ?? '').trim() : '';
+
+      if (divAmt > 0 && price > 0) {
+        yldVal = Math.round(divAmt / price * 10000) / 100;
+      } else {
+        yldVal = normalizeYield(yldVal) || 0;
       }
-      if (hIdx < 0) { alert('ヘッダーが見つかりません'); return; }
 
-      const headers = rows[hIdx].map(h => String(h).trim());
-      const ci = keyword => headers.findIndex(h => h.includes(keyword));
-
-      const COL = {
-        acct: ci('口座'),
-        code: ci('コード'),
-        name: ci('銘柄名'),
-        sec:  ci('業種'),
-        sh:   ci('保有数'),
-        acq:  ci('平均購入価格'),
-        cur:  ci('現在価格'),
-        div:  ci('1株配当'),
-        yld:  ci('表面配当利回り'),
-      };
-
-      const toNum = v => parseFloat(String(v ?? '').replace(/[,円%－\-]/g,'').trim()) || 0;
-      const newItems = [];
-      const updatedStocks = [];
-
-      for (const row of rows.slice(hIdx + 1)) {
-        const rawCode = String(row[COL.code] ?? '').replace(/\.0$/, '').trim();
-        // スキップ: 空・合計行・区切り行
-        if (!rawCode || rawCode.length < 2 ||
-            rawCode.includes('合計') || rawCode.includes('口座') || rawCode === '-') continue;
-
-        const code     = /^\d/.test(rawCode) ? rawCode.padStart(4,'0') : rawCode.toUpperCase();
-        const shares   = toNum(row[COL.sh]);
-        const acqPrice = toNum(row[COL.acq]);
-        if (shares <= 0 && acqPrice <= 0) continue;
-
-        const price    = toNum(row[COL.cur]);
-        const divAmt   = toNum(row[COL.div]);
-        let   yldVal   = toNum(row[COL.yld]);
-        const sec      = String(row[COL.sec]  ?? '').trim();
-        const name     = String(row[COL.name] ?? '').trim();
-        const acct     = COL.acct >= 0 ? String(row[COL.acct] ?? '').trim() : '';
-
-        // 配当金÷株価で計算できる場合はそちらを優先
-        if (divAmt > 0 && price > 0) {
-          yldVal = Math.round(divAmt / price * 10000) / 100;
-        } else {
-          yldVal = normalizeYield(yldVal) || 0;
-        }
-
-        // 銘柄マスタを更新（あれば価格・配当・名前を上書き、なければ追加）
-        const si = ST.stocks.findIndex(s => s.code === code);
-        if (si >= 0) {
-          if (name && (!ST.stocks[si].name || isJapanese(name) || !isJapanese(ST.stocks[si].name)))
-            ST.stocks[si].name = name;
-          if (price  > 0)    ST.stocks[si].price          = price;
-          if (divAmt > 0)    ST.stocks[si].dividendAmount  = divAmt;
-          if (yldVal > 0)    ST.stocks[si].dividendYield   = yldVal;
-          // 業種は japan_stocks の値を優先。マスタにない場合のみポートフォリオ側を使う
-          if (sec && (!ST.stocks[si].sector || ST.stocks[si].sector === '不明'))
-            ST.stocks[si].sector = sec;
-        } else if (price > 0 || name) {
-          ST.stocks.push({
-            code, name, sector:sec, market:'',
-            price: price||null, dividendAmount:divAmt||null,
-            dividendYield:yldVal||null, per:null, pbr:null, roe:null
-          });
-        }
-
-        // 既存の評価ランク・コメントを引き継ぐ
-        const existPort = ST.portfolio.find(p => p.code === code);
-        newItems.push({
-          code, account:acct, shares, acqPrice,
-          rank:    getStockRank(code) || existPort?.rank || '',
-          comment: existPort?.comment ?? '',
+      const si = ST.stocks.findIndex(s => s.code === code);
+      if (si >= 0) {
+        if (name && (!ST.stocks[si].name || isJapanese(name) || !isJapanese(ST.stocks[si].name)))
+          ST.stocks[si].name = name;
+        if (price  > 0)    ST.stocks[si].price         = price;
+        if (divAmt > 0)    ST.stocks[si].dividendAmount = divAmt;
+        if (yldVal > 0)    ST.stocks[si].dividendYield  = yldVal;
+        if (sec && (!ST.stocks[si].sector || ST.stocks[si].sector === '不明'))
+          ST.stocks[si].sector = sec;
+      } else if (price > 0 || name) {
+        ST.stocks.push({
+          code, name, sector:sec, market:'',
+          price: price||null, dividendAmount:divAmt||null,
+          dividendYield:yldVal||null, per:null, pbr:null, roe:null
         });
       }
 
-      if (!newItems.length) { statusEl.textContent = '⚠️ 有効な銘柄が見つかりません'; return; }
-
-      if (confirm(`${newItems.length}銘柄を読み込みます。\n「OK」: ポートフォリオを上書き\n「キャンセル」: 既存データに追加`)) {
-        ST.portfolio = newItems;
-      } else {
-        for (const ni of newItems) {
-          const idx = ST.portfolio.findIndex(p => p.code === ni.code);
-          if (idx >= 0) ST.portfolio[idx] = {...ST.portfolio[idx], shares:ni.shares, acqPrice:ni.acqPrice, account:ni.account};
-          else ST.portfolio.push(ni);
-        }
-      }
-
-      ST.save();
-      statusEl.textContent = `✅ ${newItems.length}銘柄を読み込みました（${new Date().toLocaleString('ja-JP')}）`;
-      renderAll();
-    } catch(err) {
-      statusEl.textContent = '❌ エラー: ' + err.message;
-      console.error(err);
+      const existPort = ST.portfolio.find(p => p.code === code);
+      newItems.push({
+        code, account:acct, shares, acqPrice,
+        rank:    getStockRank(code) || existPort?.rank || '',
+        comment: existPort?.comment ?? '',
+      });
     }
-  };
+
+    if (!newItems.length) { statusEl.textContent = '⚠️ 有効な銘柄が見つかりません'; return; }
+
+    if (silent) {
+      // 自動読み込み: 確認なしで上書き
+      ST.portfolio = newItems;
+    } else if (confirm(`${newItems.length}銘柄を読み込みます。\n「OK」: ポートフォリオを上書き\n「キャンセル」: 既存データに追加`)) {
+      ST.portfolio = newItems;
+    } else {
+      for (const ni of newItems) {
+        const idx = ST.portfolio.findIndex(p => p.code === ni.code);
+        if (idx >= 0) ST.portfolio[idx] = {...ST.portfolio[idx], shares:ni.shares, acqPrice:ni.acqPrice, account:ni.account};
+        else ST.portfolio.push(ni);
+      }
+    }
+
+    ST.save();
+    const label = silent ? `🔄 自動読み込み: ${filename}（${newItems.length}銘柄）` : `✅ ${newItems.length}銘柄を読み込みました`;
+    statusEl.textContent = label + `（${new Date().toLocaleString('ja-JP')}）`;
+    renderAll();
+  } catch(err) {
+    statusEl.textContent = '❌ エラー: ' + err.message;
+    console.error(err);
+  }
+}
+
+document.getElementById('reportXlsxInput').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById('reportStatus').textContent = '読み込み中...';
+  const reader = new FileReader();
+  reader.onload = ev => processPortfolioXlsx(ev.target.result, file.name, false);
   reader.readAsArrayBuffer(file);
   e.target.value = '';
 });
 
+// ── 起動時に最新ポートフォリオを自動読み込み（localhost のみ）──
+async function autoLoadPortfolio() {
+  if (!IS_LOCAL) return;
+  try {
+    const res = await fetch('/api/latest-portfolio');
+    if (!res.ok) return;
+    const filename = res.headers.get('X-Filename') || 'portfolio_report.xlsx';
+    const buf = await res.arrayBuffer();
+    processPortfolioXlsx(buf, filename, true);
+  } catch(e) {
+    // サーバー未起動などは無視
+  }
+}
+
 // ════════════════════════════════════════
 //  スコア計算
 // ════════════════════════════════════════
-const RANK_PT  = {'★':30,'●':20,'優待':0,'〇':0,'×':0};
+const RANK_PT  = {'★':40,'●':25,'優待':0,'〇':0,'×':0};
 const RANK_CSS = {'★':'rank-★','●':'rank-●','優待':'rank-優待','〇':'rank-〇','×':'rank-×'};
 // 自動除外条件チェック（営業利益率≤1% / 自己資本比率≤20% / 時価総額≤100億 or 未表示）
 function isAutoExcluded(code) {
@@ -1040,6 +1210,7 @@ function getStockRank(code) {
 }
 
 function sectorWeights() {
+  // 業種ごとの時価（株価×保有株数）合計 ― ダッシュボード表示用
   const vals = {};
   let total = 0;
   for (const p of ST.portfolio) {
@@ -1049,6 +1220,20 @@ function sectorWeights() {
     const sec = s?.sector || '不明';
     vals[sec] = (vals[sec] || 0) + val;
     total += val;
+  }
+  return { vals, total };
+}
+
+function sectorDivWeights() {
+  // 業種ごとの年間配当金合計 ― 分散Pt計算用
+  const vals = {};
+  let total = 0;
+  for (const p of ST.portfolio) {
+    const s      = ST.stocks.find(s => s.code === p.code);
+    const divAmt = (+s?.dividendAmount || 0) * (+p.shares || 0);
+    const sec    = s?.sector || '不明';
+    vals[sec] = (vals[sec] || 0) + divAmt;
+    total += divAmt;
   }
   return { vals, total };
 }
@@ -1071,14 +1256,14 @@ function calcScore(code) {
              :               0;
   const rPt  = rank ? (RANK_PT[rank] ?? 0) : 0;
 
-  const { vals, total } = sectorWeights();
+  const { vals: divVals, total: divTotal } = sectorDivWeights();
   const sec = s.sector || '不明';
-  let dPt = 40;
-  if (total > 0) {
-    const nSec  = Object.keys(vals).length || 1;
+  let dPt = 30;
+  if (divTotal > 0) {
+    const nSec  = Object.keys(divVals).length || 1;
     const tgt   = 1 / nSec;
-    const act   = (vals[sec] || 0) / total;
-    dPt = vals[sec] ? Math.max(0, Math.min(40, (tgt - act) / tgt * 40)) : 40;
+    const act   = (divVals[sec] || 0) / divTotal;
+    dPt = divVals[sec] ? Math.max(0, Math.min(30, (tgt - act) / tgt * 30)) : 30;
   }
 
   const totalPt = Math.round(yPt + rPt + dPt);
@@ -1240,9 +1425,14 @@ function applySortClass(th, sort) {
 }
 
 function renderStocks() {
-  const q     = document.getElementById('sSearch').value.toLowerCase();
-  const sec   = document.getElementById('sSector').value;
-  const mkt   = document.getElementById('sMarket').value;
+  const q          = document.getElementById('sSearch').value.toLowerCase();
+  const sec        = document.getElementById('sSector').value;
+  const mkt        = document.getElementById('sMarket').value;
+  const rnk        = document.getElementById('sRank').value;
+  const minYield   = parseFloat(document.getElementById('sMinYield').value)   || null;
+  const minRoe     = parseFloat(document.getElementById('sMinRoe').value)     || null;
+  const minEqRatio = parseFloat(document.getElementById('sMinEqRatio').value) || null;
+  const minOpMgn   = parseFloat(document.getElementById('sMinOpMargin').value)|| null;
 
   const sectors = [...new Set(ST.stocks.map(s=>s.sector).filter(Boolean))].sort();
   const sCur = document.getElementById('sSector').value;
@@ -1250,11 +1440,19 @@ function renderStocks() {
     sectors.map(s=>`<option${s===sCur?' selected':''}>${s}</option>`).join('');
 
   const TEXT_COLS = new Set(['code','name','sector','market','rank']);
-  let list = ST.stocks.filter(s =>
-    (!q || s.code.includes(q) || (s.name||'').toLowerCase().includes(q)) &&
-    (!sec || s.sector===sec) &&
-    (!mkt || (s.market||'').includes(mkt))
-  );
+  let list = ST.stocks.filter(s => {
+    const r = getStockRank(s.code);
+    if (rnk === '_none' && r) return false;
+    if (rnk && rnk !== '_none' && r !== rnk) return false;
+    if (!(!q || s.code.includes(q) || (s.name||'').toLowerCase().includes(q))) return false;
+    if (sec && s.sector !== sec) return false;
+    if (mkt && !(s.market||'').includes(mkt)) return false;
+    if (minYield   !== null && (+s.dividendYield   || 0) < minYield)   return false;
+    if (minRoe     !== null && (+s.roe             || 0) < minRoe)     return false;
+    if (minEqRatio !== null && (+s.equityRatio     || 0) < minEqRatio) return false;
+    if (minOpMgn   !== null && (+s.operatingMargin || 0) < minOpMgn)   return false;
+    return true;
+  });
   // 列フィルタ適用（rank は ST.ranks から取得）
   list = applyFilters(list, 'stock', (s, col) => col === 'rank' ? getStockRank(s.code) : (s[col] ?? ''));
   list = list.sort((a,b) => {
@@ -1282,14 +1480,11 @@ function renderStocks() {
         <td class="text-end">${fN(s.price)}</td>
         <td class="text-end">${fN(s.dividendAmount)}</td>
         <td class="text-end fw-bold text-success">${fY(getYield(s))}</td>
-        <td class="text-end">${fN(s.per,1)}</td>
-        <td class="text-end">${fN(s.pbr,2)}</td>
         <td class="text-end">${fPct(s.roe)}</td>
-        <td class="text-end">${fPct(s.roa)}</td>
         <td class="text-end">${fPct(s.operatingMargin)}</td>
-        <td class="text-end">${fPct(s.payoutRatio)}</td>
         <td class="text-end">${fPct(s.equityRatio)}</td>
         <td class="text-end">${fM(s.marketCap)}</td>
+        <td class="text-end">${fM(s.sales)}</td>
         <td class="text-center">
           <select class="form-select form-select-sm py-0 text-center" style="width:72px"
             onchange="updateStockRank('${s.code}',this.value)">
@@ -1307,7 +1502,7 @@ function renderStocks() {
         }</td>
       </tr>`;
     }).join('') +
-    (list.length>LIMIT ? `<tr><td colspan="17" class="text-center text-muted small">他${list.length-LIMIT}件（検索で絞り込み）</td></tr>` : '');
+    (list.length>LIMIT ? `<tr><td colspan="14" class="text-center text-muted small">他${list.length-LIMIT}件（検索で絞り込み）</td></tr>` : '');
 }
 
 // ════════════════════════════════════════
@@ -1317,7 +1512,7 @@ const FILTERS = { stock:{}, port:{}, buy:{} };
 let FD = null; // {table, col, th}
 
 const NUM_COLS = new Set([
-  'price','dividendAmount','dividendYield','per','pbr','roe','roa','operatingMargin','payoutRatio','equityRatio','marketCap',
+  'price','dividendAmount','dividendYield','roe','operatingMargin','equityRatio','marketCap','sales',
   'shares','acqPrice','eval','plPct','bookY','curY',
   'score','yPt','rPt','dPt'
 ]);
@@ -1503,7 +1698,7 @@ const RANK_ORDER = {'★':0,'●':1,'優待':2,'〇':3,'×':4,'':5};
 function renderPortfolio() {
   const tbody = document.getElementById('portTbody');
   if (!ST.portfolio.length) {
-    tbody.innerHTML = `<tr><td colspan="14" class="text-center text-muted py-4">
+    tbody.innerHTML = `<tr><td colspan="16" class="text-center text-muted py-4">
       保有銘柄がありません。「週次レポートを読み込む」または「＋ 個別に追加」で登録してください。
     </td></tr>`;
     return;
@@ -1537,6 +1732,7 @@ function renderPortfolio() {
       case 'plPct':    return row.plPct;
       case 'bookY':    return row.bookY;
       case 'curY':     return row.curY;
+      case 'annDiv':   return row.divAmt * row.sh;
       case 'rank':     return getStockRank(row.p.code) || '';
       default: return '';
     }
@@ -1556,6 +1752,7 @@ function renderPortfolio() {
       case 'plPct':   return dir * ((a.plPct??-Infinity) - (b.plPct??-Infinity));
       case 'bookY':   return dir * ((a.bookY??-Infinity) - (b.bookY??-Infinity));
       case 'curY':    return dir * (a.curY - b.curY);
+      case 'annDiv':  return dir * (a.divAmt*a.sh - b.divAmt*b.sh);
       case 'rank':    return dir * ((RANK_ORDER[getStockRank(a.p.code)]??5) - (RANK_ORDER[getStockRank(b.p.code)]??5));
       default: return 0;
     }
@@ -1575,6 +1772,13 @@ function renderPortfolio() {
       <td class="text-end fw-bold ${plCls}">${plPct!==null?fPL(plPct):'-'}</td>
       <td class="text-end text-warning fw-bold">${bookY!==null?bookY.toFixed(2)+'%':'-'}</td>
       <td class="text-end text-success">${curY?fY(curY):'-'}</td>
+      <td class="text-end text-primary fw-bold">${divAmt>0&&sh>0?'¥'+fN(Math.round(divAmt*sh)):'-'}</td>
+      <td class="text-center">
+        <input type="checkbox" class="form-check-input" style="width:18px;height:18px;cursor:pointer"
+          ${ST.paused[p.code]?'checked':''}
+          onchange="togglePaused('${p.code}',this.checked)"
+          title="チェックで買い候補から除外">
+      </td>
       <td class="text-center">
         <select class="form-select form-select-sm py-0 text-center" style="width:70px"
                 onchange="updateRank(${origIdx},this.value)">
@@ -1617,6 +1821,7 @@ function renderBuy() {
     .map(s => ({...s, sc:calcScore(s.code), p:ST.portfolio.find(p=>p.code===s.code)}))
     .filter(s => {
       if (!s.sc || s.sc.total<=0) return false;
+      if (ST.paused[s.code]) return false;
       if (getYield(s) < minYield) return false;
       if (s.sc.total < minScore-15) return false;
       if (sectorF && s.sector!==sectorF) return false;
@@ -1633,22 +1838,17 @@ function renderBuy() {
 
   // 列フィルタ適用
   const filteredScored = applyFilters(scored, 'buy', (s, col) => {
-    const bY = (s.p&&+s.p.acqPrice>0&&+s.dividendAmount>0)
-      ? +s.dividendAmount/+s.p.acqPrice*100 : null;
     switch(col) {
       case 'code':   return s.code;
       case 'name':   return s.name || '';
       case 'sector': return s.sector || '';
       case 'price':  return s.price || 0;
       case 'curY':   return getYield(s);
-      case 'bookY':  return bY;
       case 'rank':   return getStockRank(s.code);
       case 'yPt':    return s.sc.yPt;
       case 'rPt':    return s.sc.rPt;
       case 'dPt':    return s.sc.dPt;
       case 'score':  return s.sc.total;
-      case 'per':    return s.per || 0;
-      case 'pbr':    return s.pbr || 0;
       case 'roe':    return s.roe || 0;
       default: return '';
     }
@@ -1657,21 +1857,17 @@ function renderBuy() {
   // 買い候補ソート
   filteredScored.sort((a,b) => {
     const col = buySort.col, dir = buySort.dir;
-    const bookY = s => (s.p&&+s.p.acqPrice>0&&+s.dividendAmount>0)
-      ? +s.dividendAmount/+s.p.acqPrice*100 : -Infinity;
     switch(col) {
       case 'code':   return dir * a.code.localeCompare(b.code);
       case 'name':   return dir * (a.name||'').localeCompare(b.name||'');
       case 'sector': return dir * (a.sector||'').localeCompare(b.sector||'');
       case 'price':  return dir * ((+a.price||0)-(+b.price||0));
       case 'curY':   return dir * (getYield(a)-getYield(b));
-      case 'bookY':  return dir * (bookY(a)-bookY(b));
       case 'rank':   return dir * ((RANK_ORDER[getStockRank(a.code)]??5)-(RANK_ORDER[getStockRank(b.code)]??5));
       case 'yPt':    return dir * (a.sc.yPt-b.sc.yPt);
       case 'rPt':    return dir * (a.sc.rPt-b.sc.rPt);
       case 'dPt':    return dir * (a.sc.dPt-b.sc.dPt);
-      case 'per':    return dir * ((+a.per||0)-(+b.per||0));
-      case 'pbr':    return dir * ((+a.pbr||0)-(+b.pbr||0));
+      case 'annDiv': return dir * ((a.p?(+a.dividendAmount||0)*(+a.p.shares||0):0)-(b.p?(+b.dividendAmount||0)*(+b.p.shares||0):0));
       case 'roe':    return dir * ((+a.roe||0)-(+b.roe||0));
       default:       return dir * (a.sc.total-b.sc.total); // score
     }
@@ -1679,16 +1875,14 @@ function renderBuy() {
 
   const tbody = document.getElementById('buyTbody');
   if (!filteredScored.length) {
-    tbody.innerHTML = `<tr><td colspan="16" class="text-center text-muted py-4">条件に合う銘柄がありません</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="17" class="text-center text-muted py-4">条件に合う銘柄がありません</td></tr>`;
     return;
   }
 
   const rowHtml = (s, i) => {
-    const rank  = getStockRank(s.code);
-    const bookY = s.p&&+s.p.acqPrice>0&&+s.dividendAmount>0
-      ? (+s.dividendAmount/+s.p.acqPrice*100).toFixed(2)+'%' : '-';
-    const col   = scoreColor(s.sc.total);
-    const flag  = s.sc.isBuy
+    const rank   = getStockRank(s.code);
+    const col    = scoreColor(s.sc.total);
+    const flag   = s.sc.isBuy
       ? '<span class="buy-flag">🟢 BUY</span>'
       : s.sc.isWatch ? '<span class="watch-flag">🟡 WATCH</span>' : '';
     const rankSel = (v) => `<option value="${v}" ${rank===v?'selected':''}>${v||'-'}</option>`;
@@ -1696,17 +1890,22 @@ function renderBuy() {
         onchange="updateStockRank('${s.code}',this.value)">
         ${rankSel('')}${rankSel('★')}${rankSel('●')}${rankSel('優待')}${rankSel('〇')}${rankSel('×')}
       </select>`;
-    return { rank, bookY, col, flag, selHtml };
+    const annDivAmt = s.p && +s.dividendAmount > 0 && +s.p.shares > 0
+      ? Math.round(+s.dividendAmount * +s.p.shares) : null;
+    const annDivCell = annDivAmt !== null
+      ? `<span class="text-primary fw-bold">¥${fN(annDivAmt)}</span>`
+      : '<span class="text-muted">-</span>';
+    return { rank, col, flag, selHtml, annDivCell };
   };
 
   tbody.innerHTML = filteredScored.map((s,i)=>{
-    const {bookY,col,flag,selHtml} = rowHtml(s,i);
+    const {col,flag,selHtml,annDivCell} = rowHtml(s,i);
     return `<tr class="${i<3?'table-warning':''}">
       <td>${i+1}</td><td><code>${s.code}</code></td><td>${s.name||'-'}</td>
       <td><small class="text-muted">${s.sector||'-'}</small></td>
       <td class="text-end">${fN(s.price)}</td>
       <td class="text-end fw-bold text-success">${fY(getYield(s))}</td>
-      <td class="text-end text-warning">${bookY}</td>
+      <td class="text-end">${annDivCell}</td>
       <td class="text-center">${selHtml}</td>
       <td class="text-end">${s.sc.yPt}</td>
       <td class="text-end">${s.sc.rPt}</td>
@@ -1717,16 +1916,17 @@ function renderBuy() {
           <div class="score-bar-fill" style="width:${s.sc.total}%;background:${col}"></div>
         </div>
       </td>
-      <td class="text-end">${fN(s.per,1)}</td>
-      <td class="text-end">${fN(s.pbr,2)}</td>
       <td class="text-end">${fN(s.roe,1)}</td>
+      <td class="text-end">${fM(s.marketCap)}</td>
+      <td class="text-end">${fPct(s.equityRatio)}</td>
+      <td class="text-end">${fPct(s.operatingMargin)}</td>
       <td class="text-center">${flag}</td>
     </tr>`;
   }).join('');
 
   // スマホ用カード
   document.getElementById('buyCards').innerHTML = filteredScored.map((s,i)=>{
-    const {rank, bookY, col, flag, selHtml} = rowHtml(s,i);
+    const {rank, col, flag, selHtml, annDivCell} = rowHtml(s,i);
     const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}.`;
     return `<div class="buy-card${i<3?' border border-warning':''}">
       <div class="d-flex justify-content-between align-items-start mb-1">
@@ -1741,7 +1941,7 @@ function renderBuy() {
       <div class="d-flex gap-3 mb-2 small">
         <span>株価 <strong>${fN(s.price)}</strong></span>
         <span>利回り <strong class="text-success">${fY(getYield(s))}</strong></span>
-        <span>PER <strong>${fN(s.per,1)}</strong></span>
+        <span>年間配当額 ${annDivCell}</span>
       </div>
       <div class="d-flex gap-2 mb-2 small text-muted">
         <span>利回Pt: ${s.sc.yPt}</span>
@@ -1768,6 +1968,7 @@ function exportAll() {
     stocks:    ST.stocks,
     portfolio: ST.portfolio,
     ranks:     ST.ranks,
+    paused:    ST.paused,
   };
   const blob = new Blob([JSON.stringify(payload)], {type:'application/json'});
   const url  = URL.createObjectURL(blob);
@@ -1790,6 +1991,7 @@ function importAll(input) {
         if (d.stocks?.length)    ST.stocks    = d.stocks;
         if (d.portfolio?.length) ST.portfolio = d.portfolio;
         if (d.ranks)             ST.ranks     = {...ST.ranks, ...d.ranks};
+        if (d.paused)            ST.paused    = {...ST.paused, ...d.paused};
       } else {
         // 旧形式（ランクのみ）
         const count = Object.keys(d).length;
@@ -1900,6 +2102,13 @@ function updateStockRank(code, v) {
   renderStocks(); renderBuy();
 }
 function updateComment(i,v) { ST.portfolio[i].comment=v; ST.save(); }
+
+function togglePaused(code, checked) {
+  if (checked) ST.paused[code] = true;
+  else delete ST.paused[code];
+  ST.save();
+  renderBuy();  // 買い候補タブを即反映
+}
 function removePort   (i)   {
   if (confirm('削除しますか？')) { ST.portfolio.splice(i,1); ST.save(); renderAll(); }
 }
@@ -1935,7 +2144,7 @@ document.getElementById('btnExportPort').addEventListener('click', ()=>{
 document.getElementById('btnExportBuy').addEventListener('click', ()=>{
   const minScore = +document.getElementById('fMinScore').value||55;
   const minYield = +document.getElementById('fMinYield').value||2;
-  const hdr = ['順位','コード','銘柄名','業種','株価','配当利回り','評価ランク','利回Pt','ランクPt','分散Pt','総合スコア','判定','PER','PBR','ROE'];
+  const hdr = ['順位','コード','銘柄名','業種','株価','配当利回り','評価ランク','利回Pt','ランクPt','分散Pt','総合スコア','判定','ROE','時価総額','自己資本比率','営業利益率'];
   const rows = ST.stocks
     .map(s=>({...s,sc:calcScore(s.code),p:ST.portfolio.find(p=>p.code===s.code)}))
     .filter(s=>s.sc&&s.sc.total>=minScore-15&&getYield(s)>=minYield)
@@ -1944,7 +2153,7 @@ document.getElementById('btnExportBuy').addEventListener('click', ()=>{
                  getYield(s)>0?getYield(s).toFixed(2)+'%':'',
                  getStockRank(s.code)||'未評価',s.sc.yPt,s.sc.rPt,s.sc.dPt,s.sc.total,
                  s.sc.isBuy?'BUY':s.sc.isWatch?'WATCH':'',
-                 s.per||'',s.pbr||'',s.roe||'']);
+                 s.roe||'',s.marketCap||'',s.equityRatio||'',s.operatingMargin||'']);
   dlCSV(toCSV([hdr,...rows]), `buy_candidates_${new Date().toISOString().slice(0,10)}.csv`);
 });
 
@@ -1954,6 +2163,22 @@ document.getElementById('btnExportBuy').addEventListener('click', ()=>{
 document.getElementById('sSearch').addEventListener('input',  renderStocks);
 document.getElementById('sSector').addEventListener('change', renderStocks);
 document.getElementById('sMarket').addEventListener('change', renderStocks);
+document.getElementById('sRank').addEventListener('change',  renderStocks);
+document.getElementById('sMinYield').addEventListener('input',    renderStocks);
+document.getElementById('sMinRoe').addEventListener('input',      renderStocks);
+document.getElementById('sMinEqRatio').addEventListener('input',  renderStocks);
+document.getElementById('sMinOpMargin').addEventListener('input', renderStocks);
+document.getElementById('sBtnReset').addEventListener('click', () => {
+  document.getElementById('sSearch').value    = '';
+  document.getElementById('sSector').value    = '';
+  document.getElementById('sMarket').value    = '';
+  document.getElementById('sRank').value      = '';
+  document.getElementById('sMinYield').value  = '';
+  document.getElementById('sMinRoe').value    = '';
+  document.getElementById('sMinEqRatio').value   = '';
+  document.getElementById('sMinOpMargin').value  = '';
+  renderStocks();
+});
 document.getElementById('btnRefresh').addEventListener('click', renderBuy);
 document.querySelectorAll('[data-bs-toggle="tab"]').forEach(t =>
   t.addEventListener('shown.bs.tab', e => {
@@ -1966,9 +2191,232 @@ document.querySelectorAll('[data-bs-toggle="tab"]').forEach(t =>
 );
 
 // ════════════════════════════════════════
+//  GitHub Gist 同期
+// ════════════════════════════════════════
+const SYNC = {
+  token:  localStorage.getItem('div_sync_token')   || '',
+  gistId: localStorage.getItem('div_sync_gist_id') || '',
+  _busy: false,
+
+  isReady() { return !!(this.token && this.gistId); },
+
+  _headers(tok) {
+    return {
+      'Authorization': `Bearer ${tok || this.token}`,
+      'Content-Type':  'application/json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    };
+  },
+
+  _data() {
+    return JSON.stringify({
+      version:   2,
+      updatedAt: new Date().toISOString(),
+      portfolio: ST.portfolio,
+      ranks:     ST.ranks,
+      paused:    ST.paused,
+    });
+  },
+
+  async pull() {
+    if (!this.isReady()) return null;
+    syncIndicator('loading');
+    try {
+      const res = await fetch(`https://api.github.com/gists/${this.gistId}`,
+        { headers: this._headers() });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const gist  = await res.json();
+      const text  = gist.files?.['dividend_data.json']?.content;
+      if (!text)  throw new Error('ファイルが空です');
+
+      const remote = JSON.parse(text);
+      const localTs = localStorage.getItem('div_updated_at') || '';
+
+      let changed = false;
+      if (!localTs || (remote.updatedAt && remote.updatedAt > localTs)) {
+        if (Array.isArray(remote.portfolio) && remote.portfolio.length) {
+          ST.portfolio = remote.portfolio; changed = true;
+          localStorage.setItem('div_portfolio', JSON.stringify(ST.portfolio));
+        }
+        if (remote.ranks)  {
+          ST.ranks  = Object.assign({}, ST.ranks, remote.ranks);  changed = true;
+          localStorage.setItem('div_ranks', JSON.stringify(ST.ranks));
+        }
+        if (remote.paused) {
+          ST.paused = Object.assign({}, ST.paused, remote.paused); changed = true;
+          localStorage.setItem('div_paused', JSON.stringify(ST.paused));
+        }
+        if (changed) {
+          localStorage.setItem('div_updated_at', remote.updatedAt || new Date().toISOString());
+        }
+      }
+      syncIndicator('ok');
+      return changed ? 'updated' : 'same';
+    } catch(e) {
+      syncIndicator('error', e.message);
+      return null;
+    }
+  },
+
+  async push() {
+    if (!this.isReady() || this._busy) return;
+    this._busy = true;
+    syncIndicator('loading');
+    try {
+      const res = await fetch(`https://api.github.com/gists/${this.gistId}`, {
+        method:  'PATCH',
+        headers: this._headers(),
+        body: JSON.stringify({ files: { 'dividend_data.json': { content: this._data() } } }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      syncIndicator('ok');
+    } catch(e) {
+      syncIndicator('error', e.message);
+    } finally {
+      this._busy = false;
+    }
+  },
+
+  async create(token) {
+    const res = await fetch('https://api.github.com/gists', {
+      method:  'POST',
+      headers: this._headers(token),
+      body: JSON.stringify({
+        description: '配当投資ツール 同期データ',
+        public: false,
+        files: { 'dividend_data.json': { content: this._data() } },
+      }),
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(()=>({}));
+      throw new Error(j.message || `HTTP ${res.status}`);
+    }
+    return (await res.json()).id;
+  },
+
+  saveCredentials(token, gistId) {
+    this.token  = token;
+    this.gistId = gistId;
+    localStorage.setItem('div_sync_token',   token);
+    localStorage.setItem('div_sync_gist_id', gistId);
+  },
+};
+
+// ── 同期インジケーター ──
+function syncIndicator(state, msg) {
+  const btn = document.getElementById('syncBtn');
+  const sp  = document.getElementById('syncStatus');
+  if (!btn || !sp) return;
+  const map = {
+    ok:      { text:'✓', cls:'btn-outline-success',   tip:'同期済み' },
+    loading: { text:'↺', cls:'btn-outline-warning',   tip:'同期中...' },
+    error:   { text:'!', cls:'btn-outline-danger',    tip:`同期エラー: ${msg||''}` },
+    off:     { text:'',  cls:'btn-outline-secondary', tip:'同期未設定（クリックして設定）' },
+  };
+  const s = map[state] || map.off;
+  btn.className = `btn ${s.cls} btn-sm`;
+  btn.title = s.tip;
+  sp.textContent = s.text;
+}
+
+// ── 同期モーダル関数 ──
+function openSyncModal() {
+  const modal = new bootstrap.Modal(document.getElementById('modalSync'));
+  if (SYNC.isReady()) {
+    document.getElementById('syncSetupView').classList.add('d-none');
+    document.getElementById('syncReadyView').classList.remove('d-none');
+    document.getElementById('syncModalFooter').classList.add('d-none');
+    document.getElementById('syncGistIdDisplay').value = SYNC.gistId;
+  } else {
+    document.getElementById('syncSetupView').classList.remove('d-none');
+    document.getElementById('syncReadyView').classList.add('d-none');
+    document.getElementById('syncModalFooter').classList.remove('d-none');
+    document.getElementById('syncTokenInput').value  = SYNC.token  || '';
+    document.getElementById('syncGistIdInput').value = SYNC.gistId || '';
+    document.getElementById('syncSetupStatus').innerHTML = '';
+  }
+  modal.show();
+}
+
+async function setupSync() {
+  const token  = document.getElementById('syncTokenInput').value.trim();
+  const gistId = document.getElementById('syncGistIdInput').value.trim();
+  const stEl   = document.getElementById('syncSetupStatus');
+  if (!token) {
+    stEl.innerHTML = '<div class="alert alert-warning small py-1">トークンを入力してください</div>';
+    return;
+  }
+  stEl.innerHTML = '<div class="alert alert-info small py-1">設定中...</div>';
+  try {
+    let fGistId = gistId;
+    if (!fGistId) {
+      stEl.innerHTML = '<div class="alert alert-info small py-1">Gistを作成中...</div>';
+      fGistId = await SYNC.create(token);
+    }
+    SYNC.saveCredentials(token, fGistId);
+    // 既存Gistの場合はまずpull
+    if (gistId) {
+      const r = await SYNC.pull();
+      if (r === 'updated') renderAll();
+    }
+    // 設定済み画面へ切替
+    document.getElementById('syncSetupView').classList.add('d-none');
+    document.getElementById('syncReadyView').classList.remove('d-none');
+    document.getElementById('syncModalFooter').classList.add('d-none');
+    document.getElementById('syncGistIdDisplay').value = fGistId;
+    syncIndicator('ok');
+  } catch(e) {
+    stEl.innerHTML = `<div class="alert alert-danger small py-1">エラー: ${e.message}</div>`;
+    syncIndicator('error', e.message);
+  }
+}
+
+async function manualPull() {
+  const r = await SYNC.pull();
+  if (r === 'updated') { renderAll(); showToast('Gistから取得・反映しました', 'success'); }
+  else if (r === 'same') showToast('ローカルデータが最新です', 'info');
+  else showToast('同期に失敗しました', 'danger');
+}
+
+async function manualPush() {
+  ST.save();  // これがSYNC.push()をトリガー
+  showToast('Gistに送信しました', 'success');
+}
+
+function clearSync() {
+  if (!confirm('同期設定を解除しますか？（ローカルデータは保持されます）')) return;
+  SYNC.token  = '';
+  SYNC.gistId = '';
+  localStorage.removeItem('div_sync_token');
+  localStorage.removeItem('div_sync_gist_id');
+  syncIndicator('off');
+  bootstrap.Modal.getInstance(document.getElementById('modalSync'))?.hide();
+}
+
+// トースト通知（軽量）
+function showToast(msg, type='info') {
+  let c = document.getElementById('toastContainer');
+  if (!c) {
+    c = document.createElement('div');
+    c.id = 'toastContainer';
+    c.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:6px';
+    document.body.appendChild(c);
+  }
+  const t = document.createElement('div');
+  t.className = `alert alert-${type} py-2 px-3 mb-0 shadow`;
+  t.style.minWidth = '200px';
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+// ════════════════════════════════════════
 //  INIT
 // ════════════════════════════════════════
 ST.load();
+
+// 同期ステータス初期化
+syncIndicator(SYNC.isReady() ? 'ok' : 'off');
 
 // localhost以外ではCORS警告を表示
 if (!IS_LOCAL) {
@@ -1979,7 +2427,23 @@ if (ST.stocks.length) {
   document.getElementById('lastUpdated').textContent =
     `登録済: ${ST.stocks.length.toLocaleString()}銘柄`;
 }
+
+// まずローカルデータで即描画、その後Gistからpullして差分があれば再描画
 renderAll();
+if (SYNC.isReady()) {
+  SYNC.pull().then(result => {
+    if (result === 'updated') {
+      renderAll();
+      showToast('Gistから最新データを取得しました', 'success');
+    }
+  }).catch(() => {});
+}
+
+// localhost起動時: 銘柄データ → ポートフォリオ の順に自動読み込み
+(async () => {
+  await autoLoadStocks();    // japan_stocks_*.xlsx（新しいファイルがある時のみ）
+  await autoLoadPortfolio(); // portfolio_report_*.xlsx（毎回）
+})();
 </script>
 </body>
 </html>
