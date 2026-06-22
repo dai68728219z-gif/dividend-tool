@@ -2210,11 +2210,12 @@ const SYNC = {
 
   _data() {
     return JSON.stringify({
-      version:   2,
+      version:   3,
       updatedAt: new Date().toISOString(),
       portfolio: ST.portfolio,
       ranks:     ST.ranks,
       paused:    ST.paused,
+      stocks:    ST.stocks,
     });
   },
 
@@ -2234,6 +2235,10 @@ const SYNC = {
 
       let changed = false;
       if (!localTs || (remote.updatedAt && remote.updatedAt > localTs)) {
+        if (Array.isArray(remote.stocks) && remote.stocks.length) {
+          ST.stocks = remote.stocks; changed = true;
+          localStorage.setItem('div_stocks', JSON.stringify(ST.stocks));
+        }
         if (Array.isArray(remote.portfolio) && remote.portfolio.length) {
           ST.portfolio = remote.portfolio; changed = true;
           localStorage.setItem('div_portfolio', JSON.stringify(ST.portfolio));
