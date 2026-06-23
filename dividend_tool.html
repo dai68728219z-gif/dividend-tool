@@ -392,9 +392,61 @@ th.has-filter .fd-icon { opacity:1; }
         </div>
       </div>
       <div class="card p-2 mb-2">
-        <div class="small text-muted d-flex flex-wrap gap-3">
-          <span><b>スコア:</b> 配当利回りPt(0-30) ＋ 評価ランクPt(0-40) ＋ 業種分散Pt(0-30)</span>
-          <span>★=40pt ●=30pt 〇=20pt ×=除外 未評価=15pt</span>
+        <div class="d-flex align-items-center gap-2 mb-1">
+          <span class="small text-muted"><b>スコア:</b> 配当利回りPt(0-30) ＋ 評価ランクPt(0-40) ＋ 業種分散Pt(0-30)　最大100pt</span>
+          <button class="btn btn-outline-secondary btn-sm py-0 ms-auto" type="button"
+            data-bs-toggle="collapse" data-bs-target="#scoreRulePanel" style="font-size:11px">
+            📋 採点ルール詳細
+          </button>
+        </div>
+        <div class="collapse" id="scoreRulePanel">
+          <div class="row g-2 mt-1" style="font-size:12px">
+            <div class="col-12 col-md-4">
+              <div class="border rounded p-2 h-100" style="background:#fff8e1">
+                <div class="fw-bold mb-1">📊 配当利回りPt（最大30pt）</div>
+                <table class="table table-sm table-borderless mb-0" style="font-size:11px">
+                  <tr><td>5.0%以上</td><td class="fw-bold text-success">30pt</td></tr>
+                  <tr><td>4.5%以上</td><td class="fw-bold text-success">28pt</td></tr>
+                  <tr><td>4.0%以上</td><td class="fw-bold text-success">24pt</td></tr>
+                  <tr><td>3.5%以上</td><td>20pt</td></tr>
+                  <tr><td>3.0%以上</td><td>15pt</td></tr>
+                  <tr><td>3.0%未満</td><td class="text-muted">0pt</td></tr>
+                </table>
+              </div>
+            </div>
+            <div class="col-12 col-md-4">
+              <div class="border rounded p-2 h-100" style="background:#e8f5e9">
+                <div class="fw-bold mb-1">⭐ 評価ランクPt（最大40pt）</div>
+                <table class="table table-sm table-borderless mb-0" style="font-size:11px">
+                  <tr><td><span class="rank-badge rank-★">★</span></td><td class="fw-bold text-success">40pt</td></tr>
+                  <tr><td><span class="rank-badge rank-●">●</span></td><td>25pt</td></tr>
+                  <tr><td><span class="rank-badge rank-〇">〇</span></td><td class="text-muted">0pt</td></tr>
+                  <tr><td><span class="rank-badge rank-優待">優待</span></td><td class="text-muted">0pt</td></tr>
+                  <tr><td>未評価</td><td class="text-muted">0pt</td></tr>
+                  <tr><td><span class="rank-badge rank-×">×</span></td><td class="text-danger">除外（表示なし）</td></tr>
+                </table>
+              </div>
+            </div>
+            <div class="col-12 col-md-4">
+              <div class="border rounded p-2 h-100" style="background:#e3f2fd">
+                <div class="fw-bold mb-1">🌐 業種分散Pt（最大30pt）</div>
+                <div style="font-size:11px" class="mb-1">業種ごとの年間配当金合計をもとに算出。ポートフォリオで比重が低い業種ほど高ポイント。</div>
+                <table class="table table-sm table-borderless mb-0" style="font-size:11px">
+                  <tr><td>未保有業種</td><td class="fw-bold text-success">30pt（最大）</td></tr>
+                  <tr><td>目標比率ちょうど</td><td>0pt</td></tr>
+                  <tr><td>目標比率超過</td><td>0pt</td></tr>
+                </table>
+                <div class="text-muted mt-1" style="font-size:10px">目標比率 = 1 ÷ 保有業種数</div>
+              </div>
+            </div>
+            <div class="col-12">
+              <div class="border rounded p-2" style="background:#fce4e4;font-size:11px">
+                <span class="fw-bold text-danger">🚫 自動除外条件（以下のいずれかに該当すると自動で×）</span>
+                <span class="ms-2">無配当（配当金データあり・0円）　／　営業利益率 1%以下　／　自己資本比率 20%以下　／　時価総額 100億以下</span>
+                <span class="text-muted ms-2">※データが未取得（空欄）の場合は除外しない</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       <!-- PC: テーブル表示 -->
