@@ -436,13 +436,20 @@ th.has-filter .fd-icon { opacity:1; }
                 <div class="fw-bold mb-1">🌐 業種分散Pt（最大30pt）</div>
                 <div style="font-size:11px" class="mb-1">業種ごとの年間配当金合計をもとに算出。ポートフォリオで比重が低い業種ほど高ポイント。</div>
                 <table class="table table-sm table-borderless mb-0" style="font-size:11px">
-                  <tr><td>未保有業種（比率0）</td><td class="fw-bold text-success">30pt</td></tr>
-                  <tr><td>目標比率の50%（ratio=0.5）</td><td class="fw-bold text-success">23pt</td></tr>
-                  <tr><td>目標比率ちょうど（ratio=1）</td><td>15pt</td></tr>
-                  <tr><td>目標比率の1.5倍（ratio=1.5）</td><td>8pt</td></tr>
-                  <tr><td>目標比率の2倍以上（ratio≥2）</td><td class="text-muted">0pt</td></tr>
+                  <tr class="table-success"><td>未保有（ratio=0）</td><td class="fw-bold">30pt</td></tr>
+                  <tr><td>ratio &lt; 0.2</td><td>27pt</td></tr>
+                  <tr><td>ratio &lt; 0.4</td><td>24pt</td></tr>
+                  <tr><td>ratio &lt; 0.6</td><td>21pt</td></tr>
+                  <tr><td>ratio &lt; 0.8</td><td>18pt</td></tr>
+                  <tr class="table-warning"><td>ratio &lt; 1.0（目標未満）</td><td>15pt</td></tr>
+                  <tr><td>ratio &lt; 1.2</td><td>11pt</td></tr>
+                  <tr><td>ratio &lt; 1.4</td><td>7pt</td></tr>
+                  <tr><td>ratio &lt; 1.6</td><td>4pt</td></tr>
+                  <tr><td>ratio &lt; 1.8</td><td>2pt</td></tr>
+                  <tr><td>ratio &lt; 2.0</td><td>1pt</td></tr>
+                  <tr class="table-danger"><td>ratio ≥ 2.0（目標の2倍以上）</td><td class="text-muted">0pt</td></tr>
                 </table>
-                <div class="text-muted mt-1" style="font-size:10px">比率は連続的に計算。目標比率 = 1 ÷ 保有業種数　／　配当金額ベース</div>
+                <div class="text-muted mt-1" style="font-size:10px">ratio = 実際の配当比率 ÷ 目標比率　／　目標比率 = 1 ÷ 保有業種数　／　配当金額ベース</div>
               </div>
             </div>
             <div class="col-12">
@@ -1327,10 +1334,21 @@ function calcScore(code) {
     const nSec  = Object.keys(divVals).length || 1;
     const tgt   = 1 / nSec;
     const act   = (divVals[sec] || 0) / divTotal;
-    // ratio = 実際の配当比率 / 目標比率（0=未保有, 1=目標通り, 2=目標の2倍）
+    // ratio = 実際の配当比率 / 目標比率（0=未保有, 1=目標通り）
     const ratio = ((divVals[sec] || 0) / divTotal) / tgt;
-    // ratio=0→30pt, ratio=1→15pt, ratio=2以上→0pt の線形減少
-    dPt = Math.max(0, Math.round((2 - ratio) / 2 * 30));
+    // 目標以下: 3pt/0.2刻み（緩やか）, 目標以上: 4pt/0.2刻み（やや速く）
+    dPt = ratio === 0 ? 30
+        : ratio < 0.2 ? 27
+        : ratio < 0.4 ? 24
+        : ratio < 0.6 ? 21
+        : ratio < 0.8 ? 18
+        : ratio < 1.0 ? 15
+        : ratio < 1.2 ? 11
+        : ratio < 1.4 ? 7
+        : ratio < 1.6 ? 4
+        : ratio < 1.8 ? 2
+        : ratio < 2.0 ? 1
+        : 0;
   }
 
   const totalPt = Math.round(yPt + rPt + dPt);
