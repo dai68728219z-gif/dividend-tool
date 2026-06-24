@@ -406,11 +406,15 @@ th.has-filter .fd-icon { opacity:1; }
                 <div class="fw-bold mb-1">📊 配当利回りPt（最大30pt）</div>
                 <table class="table table-sm table-borderless mb-0" style="font-size:11px">
                   <tr><td>5.0%以上</td><td class="fw-bold text-success">30pt</td></tr>
-                  <tr><td>4.5%以上</td><td class="fw-bold text-success">28pt</td></tr>
-                  <tr><td>4.0%以上</td><td class="fw-bold text-success">24pt</td></tr>
-                  <tr><td>3.5%以上</td><td>20pt</td></tr>
-                  <tr><td>3.0%以上</td><td>15pt</td></tr>
-                  <tr><td>3.0%未満</td><td class="text-muted">0pt</td></tr>
+                  <tr><td>4.9%以上</td><td class="fw-bold text-success">28pt</td></tr>
+                  <tr><td>4.7%以上</td><td class="fw-bold text-success">25pt</td></tr>
+                  <tr><td>4.5%以上</td><td>22pt</td></tr>
+                  <tr><td>4.3%以上</td><td>19pt</td></tr>
+                  <tr><td>4.1%以上</td><td>16pt</td></tr>
+                  <tr><td>3.9%以上</td><td>12pt</td></tr>
+                  <tr><td>3.7%以上</td><td>8pt</td></tr>
+                  <tr><td>3.5%以上</td><td>4pt</td></tr>
+                  <tr><td>3.5%未満</td><td class="text-muted">0pt</td></tr>
                 </table>
               </div>
             </div>
@@ -432,11 +436,14 @@ th.has-filter .fd-icon { opacity:1; }
                 <div class="fw-bold mb-1">🌐 業種分散Pt（最大30pt）</div>
                 <div style="font-size:11px" class="mb-1">業種ごとの年間配当金合計をもとに算出。ポートフォリオで比重が低い業種ほど高ポイント。</div>
                 <table class="table table-sm table-borderless mb-0" style="font-size:11px">
-                  <tr><td>未保有業種</td><td class="fw-bold text-success">30pt（最大）</td></tr>
-                  <tr><td>目標比率ちょうど</td><td>0pt</td></tr>
-                  <tr><td>目標比率超過</td><td>0pt</td></tr>
+                  <tr><td>未保有業種</td><td class="fw-bold text-success">30pt</td></tr>
+                  <tr><td>目標比率の25%未満</td><td class="fw-bold text-success">22pt</td></tr>
+                  <tr><td>目標比率の50%未満</td><td>15pt</td></tr>
+                  <tr><td>目標比率の75%未満</td><td>8pt</td></tr>
+                  <tr><td>目標比率未満</td><td>3pt</td></tr>
+                  <tr><td>目標比率以上</td><td class="text-muted">0pt</td></tr>
                 </table>
-                <div class="text-muted mt-1" style="font-size:10px">目標比率 = 1 ÷ 保有業種数</div>
+                <div class="text-muted mt-1" style="font-size:10px">目標比率 = 1 ÷ 保有業種数　／　比率は年間配当金ベース</div>
               </div>
             </div>
             <div class="col-12">
@@ -1301,12 +1308,16 @@ function calcScore(code) {
   if (rank === '×') return { total:0, yPt:0, rPt:0, dPt:0, isBuy:false, isWatch:false };
 
   const yld  = getYield(s);
-  // 利回り段階テーブル（下限3%・上限5%・0.5%きざみ・最大30点）
+  // 利回り段階テーブル（下限3.5%・上限5.0%・0.2%刻み・最大30pt）
   const yPt  = yld >= 5.0 ? 30
-             : yld >= 4.5 ? 28
-             : yld >= 4.0 ? 24
-             : yld >= 3.5 ? 20
-             : yld >= 3.0 ? 15
+             : yld >= 4.9 ? 28
+             : yld >= 4.7 ? 25
+             : yld >= 4.5 ? 22
+             : yld >= 4.3 ? 19
+             : yld >= 4.1 ? 16
+             : yld >= 3.9 ? 12
+             : yld >= 3.7 ? 8
+             : yld >= 3.5 ? 4
              :               0;
   const rPt  = rank ? (RANK_PT[rank] ?? 0) : 0;
 
@@ -1317,7 +1328,16 @@ function calcScore(code) {
     const nSec  = Object.keys(divVals).length || 1;
     const tgt   = 1 / nSec;
     const act   = (divVals[sec] || 0) / divTotal;
-    dPt = divVals[sec] ? Math.max(0, Math.min(30, (tgt - act) / tgt * 30)) : 30;
+    if (!divVals[sec]) {
+      dPt = 30;  // 未保有業種
+    } else {
+      const ratio = act / tgt;  // 実際比率 / 目標比率
+      dPt = ratio < 0.25 ? 22
+          : ratio < 0.50 ? 15
+          : ratio < 0.75 ? 8
+          : ratio < 1.00 ? 3
+          : 0;  // 目標以上
+    }
   }
 
   const totalPt = Math.round(yPt + rPt + dPt);
