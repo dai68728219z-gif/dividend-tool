@@ -1408,6 +1408,7 @@ let chartInst = null;
 
 function renderDash() {
   document.getElementById('d-total').textContent = ST.stocks.length.toLocaleString();
+  document.getElementById('lastUpdated').textContent = `登録済: ${ST.stocks.length.toLocaleString()}銘柄`;
 
   const { vals, total } = sectorWeights();
   document.getElementById('d-portVal').textContent = total > 0 ? '¥'+fN(total) : '-';
