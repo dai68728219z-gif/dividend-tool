@@ -2335,8 +2335,7 @@ const SYNC = {
   },
 
   _data() {
-    // 配当なし銘柄を除外してJSONサイズを削減
-    const stocks = ST.stocks.filter(s => s.dividendAmount && +s.dividendAmount > 0);
+    const stocks = ST.stocks;
     return JSON.stringify({
       version:   4,
       updatedAt: new Date().toISOString(),
