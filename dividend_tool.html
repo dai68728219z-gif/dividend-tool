@@ -532,7 +532,7 @@ th.has-filter .fd-icon { opacity:1; }
   </div>
 </div>
 
-<!-- ════ GitHub Gist 同期モーダル ════ -->
+<!-- ════ GitHub 同期モーダル ════ -->
 <div class="modal fade" id="modalSync" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -545,45 +545,32 @@ th.has-filter .fd-icon { opacity:1; }
         <!-- ── セットアップ画面 ── -->
         <div id="syncSetupView">
           <div class="alert alert-info small py-2 mb-3">
-            <strong>GitHub Gist で自動同期します</strong><br>
-            ① PCでトークンを入力して「Gistを新規作成」→ Gist IDが発行されます<br>
-            ② スマホで同じトークン＋Gist IDを入力 → 同期開始
+            <strong>GitHub リポジトリで自動同期します</strong><br>
+            👁 データの読み込みはトークン不要（スマホはこのまま使えます）<br>
+            ✏️ ランク変更などを送信したい場合はトークンを設定してください
           </div>
           <div class="mb-3">
-            <label class="form-label fw-bold small">GitHub Personal Access Token</label>
-            <input type="password" class="form-control font-monospace form-control-sm" id="syncTokenInput" placeholder="ghp_xxxx...">
+            <label class="form-label fw-bold small">GitHub Personal Access Token（送信専用・任意）</label>
+            <input type="password" class="form-control font-monospace form-control-sm" id="syncTokenInput" placeholder="ghp_xxxx...（読み取りのみなら空欄可）">
             <div class="form-text">
               GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)<br>
-              スコープ: <code>gist</code> のみ
+              スコープ: <code>public_repo</code>
             </div>
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-bold small">
-              Gist ID
-              <span class="text-muted fw-normal">（2台目は空欄にせずPCのIDを入力）</span>
-            </label>
-            <input type="text" class="form-control font-monospace form-control-sm" id="syncGistIdInput" placeholder="空欄 = 新規作成（初回のみ）">
           </div>
           <div id="syncSetupStatus"></div>
         </div>
 
         <!-- ── 設定済み画面 ── -->
         <div id="syncReadyView" class="d-none">
-          <div class="alert alert-success small py-2">
-            <strong>✅ 同期が有効です</strong>　データを保存するたびに自動でGistに書き込まれます
+          <div class="alert alert-success small py-2" id="syncReadyAlert">
+            <strong>✅ 同期が有効です</strong>　データを保存するたびに自動でGitHubに書き込まれます
           </div>
-          <div class="mb-2">
-            <label class="form-label fw-bold small">Gist ID（他デバイスにコピーして入力）</label>
-            <div class="input-group input-group-sm">
-              <input type="text" class="form-control font-monospace" id="syncGistIdDisplay" readonly>
-              <button class="btn btn-outline-secondary" onclick="navigator.clipboard.writeText(document.getElementById('syncGistIdDisplay').value).then(()=>showToast('コピーしました','info'))">コピー</button>
-            </div>
-          </div>
+          <div class="mb-2 small text-muted font-monospace" id="syncRepoDisplay"></div>
           <div class="d-flex gap-2 mt-3">
-            <button class="btn btn-outline-danger btn-sm" onclick="clearSync()">同期を解除</button>
+            <button class="btn btn-outline-danger btn-sm" onclick="clearSync()">トークンを解除</button>
             <button class="btn btn-outline-secondary btn-sm" onclick="diagSync()">🔍 診断</button>
             <button class="btn btn-outline-primary btn-sm ms-auto" onclick="manualPull()">↓ 今すぐ取得</button>
-            <button class="btn btn-primary btn-sm" onclick="manualPush()">↑ 今すぐ送信</button>
+            <button class="btn btn-primary btn-sm" id="syncPushBtn" onclick="manualPush()">↑ 今すぐ送信</button>
           </div>
           <div id="syncDiagResult" class="mt-2 small" style="font-family:monospace;white-space:pre-wrap;max-height:200px;overflow-y:auto"></div>
         </div>
@@ -591,7 +578,7 @@ th.has-filter .fd-icon { opacity:1; }
       </div>
       <div class="modal-footer" id="syncModalFooter">
         <button class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
-        <button class="btn btn-primary" onclick="setupSync()">同期を開始</button>
+        <button class="btn btn-primary" onclick="setupSync()">設定する</button>
       </div>
     </div>
   </div>
@@ -732,8 +719,8 @@ const ST = {
     localStorage.setItem('div_ranks',     JSON.stringify(this.ranks));
     localStorage.setItem('div_paused',    JSON.stringify(this.paused));
     localStorage.setItem('div_updated_at', new Date().toISOString());
-    // GitHub Gist 自動プッシュ（fire-and-forget）
-    if (typeof SYNC !== 'undefined' && SYNC.isReady()) SYNC.push().catch(()=>{});
+    // GitHub 自動プッシュ（fire-and-forget、トークンがある場合のみ）
+    if (typeof SYNC !== 'undefined' && SYNC.canPush()) SYNC.push().catch(()=>{});
     // localhost経由の場合: 保有データを holdings.json に自動保存
     if (typeof IS_LOCAL !== 'undefined' && IS_LOCAL && this.portfolio.length > 0) {
       const holdings = this.portfolio.map(p => ({
@@ -2310,51 +2297,54 @@ document.querySelectorAll('[data-bs-toggle="tab"]').forEach(t =>
 //  GitHub Gist 同期
 // ════════════════════════════════════════
 const SYNC = {
-  token:  localStorage.getItem('div_sync_token')   || '',
-  gistId: localStorage.getItem('div_sync_gist_id') || '',
+  // GitHub Pages リポジトリに data.json を置く方式
+  // 読み込み: raw.githubusercontent.com（認証不要）
+  // 書き込み: GitHub Contents API（トークン必要）
+  REPO_OWNER: 'dai68728219z-gif',
+  REPO_NAME:  'dividend-tool',
+  DATA_FILE:  'data.json',
+
+  token: localStorage.getItem('div_sync_token') || '',
   _busy: false,
 
-  isReady() { return !!(this.token && this.gistId); },
+  isReady() { return true; },         // pull は常に可能
+  canPush()  { return !!this.token; }, // push はトークンが必要
 
-  _headers(tok) {
+  _headers() {
     return {
-      'Authorization': `Bearer ${tok || this.token}`,
+      'Authorization': `Bearer ${this.token}`,
       'Content-Type':  'application/json',
       'X-GitHub-Api-Version': '2022-11-28',
     };
   },
 
+  _rawUrl() {
+    return `https://raw.githubusercontent.com/${this.REPO_OWNER}/${this.REPO_NAME}/main/${this.DATA_FILE}?ts=${Date.now()}`;
+  },
+
+  _apiUrl() {
+    return `https://api.github.com/repos/${this.REPO_OWNER}/${this.REPO_NAME}/contents/${this.DATA_FILE}`;
+  },
+
   _data() {
+    // 配当なし銘柄を除外してJSONサイズを削減
+    const stocks = ST.stocks.filter(s => s.dividendAmount && +s.dividendAmount > 0);
     return JSON.stringify({
-      version:   3,
+      version:   4,
       updatedAt: new Date().toISOString(),
       portfolio: ST.portfolio,
       ranks:     ST.ranks,
       paused:    ST.paused,
-      stocks:    ST.stocks,
+      stocks,
     });
   },
 
   async pull(force = false) {
-    if (!this.isReady()) return null;
     syncIndicator('loading');
     try {
-      const res = await fetch(`https://api.github.com/gists/${this.gistId}`,
-        { headers: this._headers() });
+      const res = await fetch(this._rawUrl());
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const gist  = await res.json();
-      const fileInfo = gist.files?.['dividend_data.json'];
-      if (!fileInfo) throw new Error('ファイルが空です');
-      let text = fileInfo.content;
-      // Gist API は大きなファイルを truncated にするため raw_url から取得する
-      if (fileInfo.truncated) {
-        const raw = await fetch(fileInfo.raw_url, { headers: this._headers() });
-        if (!raw.ok) throw new Error(`raw_url fetch failed: HTTP ${raw.status}`);
-        text = await raw.text();
-      }
-      if (!text) throw new Error('ファイルが空です');
-
-      const remote = JSON.parse(text);
+      const remote = await res.json();
       const localTs = localStorage.getItem('div_updated_at') || '';
 
       let changed = false;
@@ -2367,8 +2357,8 @@ const SYNC = {
           ST.portfolio = remote.portfolio; changed = true;
           localStorage.setItem('div_portfolio', JSON.stringify(ST.portfolio));
         }
-        if (remote.ranks)  {
-          ST.ranks  = Object.assign({}, ST.ranks, remote.ranks);  changed = true;
+        if (remote.ranks) {
+          ST.ranks = Object.assign({}, ST.ranks, remote.ranks); changed = true;
           localStorage.setItem('div_ranks', JSON.stringify(ST.ranks));
         }
         if (remote.paused) {
@@ -2379,7 +2369,7 @@ const SYNC = {
           localStorage.setItem('div_updated_at', remote.updatedAt || new Date().toISOString());
         }
       }
-      syncIndicator('ok');
+      syncIndicator(this.canPush() ? 'ok' : 'readonly');
       return changed ? 'updated' : 'same';
     } catch(e) {
       syncIndicator('error', e.message);
@@ -2388,16 +2378,29 @@ const SYNC = {
   },
 
   async push() {
-    if (!this.isReady() || this._busy) return;
+    if (!this.canPush() || this._busy) return;
     this._busy = true;
     syncIndicator('loading');
     try {
-      const res = await fetch(`https://api.github.com/gists/${this.gistId}`, {
-        method:  'PATCH',
+      // 現在のファイルSHAを取得（更新に必要）
+      let sha = null;
+      const infoRes = await fetch(this._apiUrl(), { headers: this._headers() });
+      if (infoRes.ok) sha = (await infoRes.json()).sha;
+
+      // JSONをbase64エンコード
+      const content = btoa(unescape(encodeURIComponent(this._data())));
+      const body = { message: `sync: ${new Date().toISOString()}`, content };
+      if (sha) body.sha = sha;
+
+      const res = await fetch(this._apiUrl(), {
+        method:  'PUT',
         headers: this._headers(),
-        body: JSON.stringify({ files: { 'dividend_data.json': { content: this._data() } } }),
+        body:    JSON.stringify(body),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.message || `HTTP ${res.status}`);
+      }
       syncIndicator('ok');
     } catch(e) {
       syncIndicator('error', e.message);
@@ -2406,28 +2409,9 @@ const SYNC = {
     }
   },
 
-  async create(token) {
-    const res = await fetch('https://api.github.com/gists', {
-      method:  'POST',
-      headers: this._headers(token),
-      body: JSON.stringify({
-        description: '配当投資ツール 同期データ',
-        public: false,
-        files: { 'dividend_data.json': { content: this._data() } },
-      }),
-    });
-    if (!res.ok) {
-      const j = await res.json().catch(()=>({}));
-      throw new Error(j.message || `HTTP ${res.status}`);
-    }
-    return (await res.json()).id;
-  },
-
-  saveCredentials(token, gistId) {
-    this.token  = token;
-    this.gistId = gistId;
-    localStorage.setItem('div_sync_token',   token);
-    localStorage.setItem('div_sync_gist_id', gistId);
+  saveCredentials(token) {
+    this.token = token;
+    localStorage.setItem('div_sync_token', token);
   },
 };
 
@@ -2437,10 +2421,11 @@ function syncIndicator(state, msg) {
   const sp  = document.getElementById('syncStatus');
   if (!btn || !sp) return;
   const map = {
-    ok:      { text:'✓', cls:'btn-outline-success',   tip:'同期済み' },
-    loading: { text:'↺', cls:'btn-outline-warning',   tip:'同期中...' },
-    error:   { text:'!', cls:'btn-outline-danger',    tip:`同期エラー: ${msg||''}` },
-    off:     { text:'',  cls:'btn-outline-secondary', tip:'同期未設定（クリックして設定）' },
+    ok:       { text:'✓', cls:'btn-outline-success',   tip:'同期済み（送信可能）' },
+    readonly: { text:'👁', cls:'btn-outline-info',      tip:'読み取り専用（トークン未設定）' },
+    loading:  { text:'↺', cls:'btn-outline-warning',   tip:'同期中...' },
+    error:    { text:'!', cls:'btn-outline-danger',    tip:`同期エラー: ${msg||''}` },
+    off:      { text:'',  cls:'btn-outline-secondary', tip:'同期未設定（クリックして設定）' },
   };
   const s = map[state] || map.off;
   btn.className = `btn ${s.cls} btn-sm`;
@@ -2449,55 +2434,41 @@ function syncIndicator(state, msg) {
 }
 
 // ── 同期モーダル関数 ──
+function _showSyncReadyView() {
+  document.getElementById('syncSetupView').classList.add('d-none');
+  document.getElementById('syncReadyView').classList.remove('d-none');
+  document.getElementById('syncModalFooter').classList.add('d-none');
+  document.getElementById('syncRepoDisplay').textContent =
+    `${SYNC.REPO_OWNER}/${SYNC.REPO_NAME}/${SYNC.DATA_FILE}`;
+  const pushBtn = document.getElementById('syncPushBtn');
+  const alert   = document.getElementById('syncReadyAlert');
+  if (SYNC.canPush()) {
+    pushBtn.classList.remove('d-none');
+    alert.innerHTML = '<strong>✅ 同期有効（送受信可能）</strong>　データを保存するたびに自動でGitHubに書き込まれます';
+    alert.className = 'alert alert-success small py-2';
+  } else {
+    pushBtn.classList.add('d-none');
+    alert.innerHTML = '<strong>👁 読み取り専用</strong>　データの取得のみ可能。ランク変更を送信したい場合はトークンを設定してください';
+    alert.className = 'alert alert-info small py-2';
+  }
+}
+
 function openSyncModal() {
   const modal = new bootstrap.Modal(document.getElementById('modalSync'));
-  if (SYNC.isReady()) {
-    document.getElementById('syncSetupView').classList.add('d-none');
-    document.getElementById('syncReadyView').classList.remove('d-none');
-    document.getElementById('syncModalFooter').classList.add('d-none');
-    document.getElementById('syncGistIdDisplay').value = SYNC.gistId;
-  } else {
-    document.getElementById('syncSetupView').classList.remove('d-none');
-    document.getElementById('syncReadyView').classList.add('d-none');
-    document.getElementById('syncModalFooter').classList.remove('d-none');
-    document.getElementById('syncTokenInput').value  = SYNC.token  || '';
-    document.getElementById('syncGistIdInput').value = SYNC.gistId || '';
-    document.getElementById('syncSetupStatus').innerHTML = '';
-  }
+  _showSyncReadyView();
   modal.show();
 }
 
 async function setupSync() {
-  const token  = document.getElementById('syncTokenInput').value.trim();
-  const gistId = document.getElementById('syncGistIdInput').value.trim();
-  const stEl   = document.getElementById('syncSetupStatus');
-  if (!token) {
-    stEl.innerHTML = '<div class="alert alert-warning small py-1">トークンを入力してください</div>';
-    return;
-  }
-  stEl.innerHTML = '<div class="alert alert-info small py-1">設定中...</div>';
-  try {
-    let fGistId = gistId;
-    if (!fGistId) {
-      stEl.innerHTML = '<div class="alert alert-info small py-1">Gistを作成中...</div>';
-      fGistId = await SYNC.create(token);
-    }
-    SYNC.saveCredentials(token, fGistId);
-    // 既存Gistの場合はまずpull
-    if (gistId) {
-      const r = await SYNC.pull();
-      if (r === 'updated') renderAll();
-    }
-    // 設定済み画面へ切替
-    document.getElementById('syncSetupView').classList.add('d-none');
-    document.getElementById('syncReadyView').classList.remove('d-none');
-    document.getElementById('syncModalFooter').classList.add('d-none');
-    document.getElementById('syncGistIdDisplay').value = fGistId;
-    syncIndicator('ok');
-  } catch(e) {
-    stEl.innerHTML = `<div class="alert alert-danger small py-1">エラー: ${e.message}</div>`;
-    syncIndicator('error', e.message);
-  }
+  const token = document.getElementById('syncTokenInput').value.trim();
+  const stEl  = document.getElementById('syncSetupStatus');
+  SYNC.saveCredentials(token);
+  stEl.innerHTML = '<div class="alert alert-info small py-1">確認中...</div>';
+  const r = await SYNC.pull(true);
+  if (r === 'updated') renderAll();
+  _showSyncReadyView();
+  syncIndicator(SYNC.canPush() ? 'ok' : 'readonly');
+  stEl.innerHTML = '';
 }
 
 // ════════════════════════════════════════
@@ -2541,53 +2512,47 @@ async function diagSync() {
   const el = document.getElementById('syncDiagResult');
   el.textContent = '診断中...';
   try {
-    const res = await fetch(`https://api.github.com/gists/${SYNC.gistId}`, { headers: SYNC._headers() });
+    const res = await fetch(SYNC._rawUrl());
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const gist = await res.json();
-    const text = gist.files?.['dividend_data.json']?.content;
-    if (!text) throw new Error('Gistにdividend_data.jsonがありません');
-    const remote = JSON.parse(text);
-    const localTs = localStorage.getItem('div_updated_at') || '(なし)';
-    const localStocks = ST.stocks.length;
-    const remoteStocks = (remote.stocks || []).length;
+    const remote = await res.json();
+    const localTs     = localStorage.getItem('div_updated_at') || '(なし)';
     const autoExcluded = ST.stocks.filter(s => isAutoExcluded(s.code)).length;
     const scored = ST.stocks.filter(s => { const sc = calcScore(s.code); return sc && sc.total > 0; }).length;
     el.textContent =
-      `【Gist】\n` +
+      `【GitHub data.json】\n` +
       `  更新日時: ${remote.updatedAt || '不明'}\n` +
-      `  銘柄数:   ${remoteStocks}\n` +
+      `  銘柄数:   ${(remote.stocks||[]).length}\n` +
       `  PF数:     ${(remote.portfolio||[]).length}\n` +
       `  ランク数: ${Object.keys(remote.ranks||{}).length}\n\n` +
       `【ローカル】\n` +
       `  更新日時: ${localTs}\n` +
-      `  銘柄数:   ${localStocks}\n` +
+      `  銘柄数:   ${ST.stocks.length}\n` +
       `  自動除外: ${autoExcluded}銘柄\n` +
-      `  スコア>0: ${scored}銘柄（買い候補候補）`;
+      `  スコア>0: ${scored}銘柄`;
   } catch(e) {
     el.textContent = 'エラー: ' + e.message;
   }
 }
 
 async function manualPull() {
-  const r = await SYNC.pull(true);  // force=true: タイムスタンプ問わず強制取得
-  if (r === 'updated') { renderAll(); showToast('Gistから取得・反映しました', 'success'); }
-  else if (r === 'same') showToast('Gistにデータがありません', 'info');
-  else showToast('同期に失敗しました', 'danger');
+  const r = await SYNC.pull(true);
+  if (r === 'updated') { renderAll(); showToast('GitHubから取得・反映しました', 'success'); }
+  else if (r === 'same') showToast('すでに最新です', 'info');
+  else showToast('取得に失敗しました', 'danger');
 }
 
 async function manualPush() {
-  ST.save();  // これがSYNC.push()をトリガー
-  showToast('Gistに送信しました', 'success');
+  if (!SYNC.canPush()) { showToast('トークンが設定されていません', 'warning'); return; }
+  await SYNC.push();
+  showToast('GitHubに送信しました', 'success');
 }
 
 function clearSync() {
-  if (!confirm('同期設定を解除しますか？（ローカルデータは保持されます）')) return;
-  SYNC.token  = '';
-  SYNC.gistId = '';
+  if (!confirm('トークンを解除しますか？（ローカルデータは保持されます）')) return;
+  SYNC.token = '';
   localStorage.removeItem('div_sync_token');
-  localStorage.removeItem('div_sync_gist_id');
-  syncIndicator('off');
-  bootstrap.Modal.getInstance(document.getElementById('modalSync'))?.hide();
+  syncIndicator('readonly');
+  _showSyncReadyView();
 }
 
 // トースト通知（軽量）
@@ -2613,7 +2578,7 @@ function showToast(msg, type='info') {
 ST.load();
 
 // 同期ステータス初期化
-syncIndicator(SYNC.isReady() ? 'ok' : 'off');
+syncIndicator(SYNC.canPush() ? 'ok' : 'readonly');
 
 // localhost以外ではCORS警告を表示
 if (!IS_LOCAL) {
@@ -2625,15 +2590,14 @@ if (ST.stocks.length) {
     `登録済: ${ST.stocks.length.toLocaleString()}銘柄`;
 }
 
-// まずローカルデータで即描画、その後Gistからpullして差分があれば再描画
+// まずローカルデータで即描画、その後GitHubからpullして差分があれば再描画
 renderAll();
-if (SYNC.isReady()) {
-  SYNC.pull().then(result => {
-    if (result === 'updated') {
-      renderAll();
-      showToast('Gistから最新データを取得しました', 'success');
-    }
-  }).catch(() => {});
+SYNC.pull().then(result => {
+  if (result === 'updated') {
+    renderAll();
+    showToast('GitHubから最新データを取得しました', 'success');
+  }
+}).catch(() => {});
 }
 
 // localhost起動時: 銘柄データ → ポートフォリオ の順に自動読み込み
