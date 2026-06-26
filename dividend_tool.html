@@ -279,6 +279,9 @@ th.has-filter .fd-icon { opacity:1; }
           <div class="col-auto align-self-end">
             <button class="btn btn-outline-secondary btn-sm" id="sBtnReset">リセット</button>
           </div>
+          <div class="col-auto align-self-end">
+            <button class="btn btn-outline-warning btn-sm" onclick="openBulkRankModal()">📋 一括ランク設定</button>
+          </div>
         </div>
       </div>
 
@@ -493,6 +496,42 @@ th.has-filter .fd-icon { opacity:1; }
 </div>
 
 <!-- ══ モーダル ══ -->
+<!-- ════ 一括ランク設定モーダル ════ -->
+<div class="modal fade" id="modalBulkRank" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">📋 業種一括ランク設定</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-warning small py-2">
+          指定した業種の<strong>空白（未評価）銘柄のみ</strong>に一括でランクを設定します。<br>
+          既にランクが付いている銘柄は変更しません。
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-bold">業種</label>
+          <select class="form-select" id="bulkSectorSel"></select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-bold">設定するランク</label>
+          <div class="d-flex gap-2 flex-wrap">
+            <div class="form-check"><input class="form-check-input" type="radio" name="bulkRankR" id="bR×" value="×" checked><label class="form-check-label" for="bR×"><span class="rank-badge rank-×">×</span> 除外</label></div>
+            <div class="form-check"><input class="form-check-input" type="radio" name="bulkRankR" id="bR〇" value="〇"><label class="form-check-label" for="bR〇"><span class="rank-badge rank-〇">〇</span></label></div>
+            <div class="form-check"><input class="form-check-input" type="radio" name="bulkRankR" id="bR●" value="●"><label class="form-check-label" for="bR●"><span class="rank-badge rank-●">●</span></label></div>
+            <div class="form-check"><input class="form-check-input" type="radio" name="bulkRankR" id="bR★" value="★"><label class="form-check-label" for="bR★"><span class="rank-badge rank-★">★</span></label></div>
+          </div>
+        </div>
+        <div id="bulkRankPreview" class="small text-muted"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+        <button class="btn btn-warning fw-bold" onclick="applyBulkRank()">一括設定する</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ════ GitHub Gist 同期モーダル ════ -->
 <div class="modal fade" id="modalSync" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
@@ -2304,8 +2343,16 @@ const SYNC = {
         { headers: this._headers() });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const gist  = await res.json();
-      const text  = gist.files?.['dividend_data.json']?.content;
-      if (!text)  throw new Error('ファイルが空です');
+      const fileInfo = gist.files?.['dividend_data.json'];
+      if (!fileInfo) throw new Error('ファイルが空です');
+      let text = fileInfo.content;
+      // Gist API は大きなファイルを truncated にするため raw_url から取得する
+      if (fileInfo.truncated) {
+        const raw = await fetch(fileInfo.raw_url, { headers: this._headers() });
+        if (!raw.ok) throw new Error(`raw_url fetch failed: HTTP ${raw.status}`);
+        text = await raw.text();
+      }
+      if (!text) throw new Error('ファイルが空です');
 
       const remote = JSON.parse(text);
       const localTs = localStorage.getItem('div_updated_at') || '';
@@ -2451,6 +2498,43 @@ async function setupSync() {
     stEl.innerHTML = `<div class="alert alert-danger small py-1">エラー: ${e.message}</div>`;
     syncIndicator('error', e.message);
   }
+}
+
+// ════════════════════════════════════════
+//  一括ランク設定
+// ════════════════════════════════════════
+function openBulkRankModal() {
+  const sectors = [...new Set(ST.stocks.map(s => s.sector).filter(Boolean))].sort();
+  const sel = document.getElementById('bulkSectorSel');
+  sel.innerHTML = sectors.map(s => `<option value="${s}">${s}</option>`).join('');
+  // 食料品をデフォルト選択
+  const foodOpt = [...sel.options].find(o => o.value.includes('食料'));
+  if (foodOpt) sel.value = foodOpt.value;
+  updateBulkPreview();
+  sel.addEventListener('change', updateBulkPreview);
+  document.querySelectorAll('input[name="bulkRankR"]').forEach(r => r.addEventListener('change', updateBulkPreview));
+  new bootstrap.Modal(document.getElementById('modalBulkRank')).show();
+}
+
+function updateBulkPreview() {
+  const sector = document.getElementById('bulkSectorSel').value;
+  const rank   = document.querySelector('input[name="bulkRankR"]:checked')?.value || '×';
+  const targets = ST.stocks.filter(s => s.sector === sector && !(s.code in ST.ranks));
+  document.getElementById('bulkRankPreview').textContent =
+    `「${sector}」の未評価銘柄 ${targets.length} 銘柄に「${rank}」を設定します。`;
+}
+
+function applyBulkRank() {
+  const sector = document.getElementById('bulkSectorSel').value;
+  const rank   = document.querySelector('input[name="bulkRankR"]:checked')?.value || '×';
+  const targets = ST.stocks.filter(s => s.sector === sector && !(s.code in ST.ranks));
+  if (!targets.length) { alert('対象銘柄がありません'); return; }
+  if (!confirm(`「${sector}」の未評価銘柄 ${targets.length} 銘柄に「${rank}」を設定します。よろしいですか？`)) return;
+  targets.forEach(s => { ST.ranks[s.code] = rank; });
+  ST.save();
+  renderAll();
+  bootstrap.Modal.getInstance(document.getElementById('modalBulkRank'))?.hide();
+  showToast(`${targets.length}銘柄に「${rank}」を設定しました`, 'success');
 }
 
 async function diagSync() {
