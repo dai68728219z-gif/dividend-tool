@@ -2560,9 +2560,18 @@ async function manualPull() {
 
 async function manualPush() {
   if (!SYNC.canPush()) { showToast('トークンが設定されていません', 'warning'); return; }
+  // _busy の場合は少し待ってリトライ
+  if (SYNC._busy) {
+    await new Promise(r => setTimeout(r, 1500));
+  }
   try {
-    await SYNC.push();
-    showToast('GitHubに送信しました', 'success');
+    const ok = await SYNC.push();
+    if (ok === false) {
+      showToast('送信できませんでした（再度お試しください）', 'warning');
+    } else {
+      const rankCount = Object.keys(ST.ranks).length;
+      showToast(`GitHubに送信しました（ランク数: ${rankCount}件）`, 'success');
+    }
   } catch(e) {
     showToast(`送信失敗: ${e.message}`, 'danger');
   }
