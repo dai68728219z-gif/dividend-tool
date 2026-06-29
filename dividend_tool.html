@@ -2385,7 +2385,7 @@ const SYNC = {
   },
 
   async push() {
-    if (!this.canPush() || this._busy) return;
+    if (!this.canPush() || this._busy) return false;
     this._busy = true;
     syncIndicator('loading');
     try {
@@ -2409,8 +2409,10 @@ const SYNC = {
         throw new Error(j.message || `HTTP ${res.status}`);
       }
       syncIndicator('ok');
+      return true;
     } catch(e) {
       syncIndicator('error', e.message);
+      throw e;  // 呼び出し元でエラー内容を取得できるよう再スロー
     } finally {
       this._busy = false;
     }
@@ -2558,8 +2560,12 @@ async function manualPull() {
 
 async function manualPush() {
   if (!SYNC.canPush()) { showToast('トークンが設定されていません', 'warning'); return; }
-  await SYNC.push();
-  showToast('GitHubに送信しました', 'success');
+  try {
+    await SYNC.push();
+    showToast('GitHubに送信しました', 'success');
+  } catch(e) {
+    showToast(`送信失敗: ${e.message}`, 'danger');
+  }
 }
 
 function clearSync() {
