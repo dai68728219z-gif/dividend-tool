@@ -182,30 +182,9 @@ th.has-filter .fd-icon { opacity:1; }
     <!-- ══ タブ2: 銘柄データ ══ -->
     <div class="tab-pane fade" id="tab-stocks">
 
-      <!-- J-Quants API パネル (V2) -->
-      <div class="jq-panel mb-3">
-        <div class="d-flex align-items-center gap-2 mb-2">
-          <span class="fw-bold">🌐 J-Quants API V2（全上場銘柄を直接取得）</span>
-          <a href="https://jpx-jquants.com/ja/dashboard" target="_blank" class="badge bg-info text-dark text-decoration-none small">APIキー発行 →</a>
-          <span class="text-muted small">ダッシュボードで発行したAPIキーを入力</span>
-        </div>
-        <div id="jqLocalWarning" class="alert alert-warning py-2 px-3 mb-2 small d-none">
-          ⚠️ <b>CORS制限</b>: このHTMLはファイルから直接開かれています。J-Quantsボタンを使うには
-          <code>start_tool.py</code> を実行して <a href="http://localhost:8080" target="_blank">http://localhost:8080</a> で開いてください。
-        </div>
-        <div class="d-flex gap-2 align-items-center flex-wrap">
-          <input type="text" id="jqApiKey" placeholder="J-Quants APIキー（x-api-key）" class="form-control form-control-sm" style="max-width:340px">
-          <button id="btnJQ" class="btn btn-info btn-sm text-dark fw-bold">🌐 全銘柄取得</button>
-          <button id="btnJQClear" class="btn btn-outline-secondary btn-sm">キーをクリア</button>
-          <div id="jqProgress" class="d-none">
-            <div class="spinner-border spinner-border-sm text-info me-1"></div>
-            <span id="jqProgressTxt" class="small text-info"></span>
-          </div>
-        </div>
-        <div id="jqStatus" class="small mt-1 text-muted"></div>
-      </div>
-
       <!-- Yahoo Finance 株価取得パネル -->
+      <!-- ※銘柄データ本体は毎平日16:00の自動バッチ（japan_stocks_fetcher.py）で更新され、
+           localhost起動時とGitHub同期で自動反映される。手動取得UIは廃止済み。 -->
       <div class="card p-3 mb-3" style="border-left:4px solid #27ae60!important;">
         <div class="d-flex align-items-center gap-2 mb-2">
           <span class="fw-bold">📈 Yahoo Finance（今日の株価・配当を取得）</span>
@@ -221,16 +200,6 @@ th.has-filter .fd-icon { opacity:1; }
         <div id="yahooStatus" class="small mt-1 text-muted"></div>
       </div>
 
-      <!-- xlsx import パネル -->
-      <div class="card p-3 mb-2">
-        <div class="d-flex gap-2 align-items-center flex-wrap">
-          <label class="btn btn-primary btn-sm mb-0">
-            📂 japan_stocks xlsxから読み込む
-            <input type="file" id="xlsxInput" accept=".xlsx,.xls,.csv" hidden>
-          </label>
-          <span class="text-muted small ms-auto" id="stockCount">0件</span>
-        </div>
-      </div>
       <!-- フィルターバー -->
       <div class="card p-3 mb-3">
         <div class="row g-2 align-items-end">
@@ -282,6 +251,9 @@ th.has-filter .fd-icon { opacity:1; }
           <div class="col-auto align-self-end">
             <button class="btn btn-outline-warning btn-sm" onclick="openBulkRankModal()">📋 一括ランク設定</button>
           </div>
+          <div class="col-auto align-self-end ms-auto">
+            <span class="text-muted small" id="stockCount">0件</span>
+          </div>
         </div>
       </div>
 
@@ -313,27 +285,8 @@ th.has-filter .fd-icon { opacity:1; }
     <!-- ══ タブ3: ポートフォリオ ══ -->
     <div class="tab-pane fade" id="tab-portfolio">
 
-      <!-- 週次レポート import パネル -->
-      <div class="report-panel mb-3">
-        <div class="fw-bold mb-2">📊 週次レポート（portfolio_report_*.xlsx）から読み込む</div>
-        <div class="d-flex gap-2 align-items-center flex-wrap">
-          <label class="btn btn-warning btn-sm mb-0 fw-bold">
-            📂 週次レポートを読み込む
-            <input type="file" id="reportXlsxInput" accept=".xlsx" hidden>
-          </label>
-          <span class="text-muted small">大輔NISA・大輔特定・美沙紀NISA の3口座 ＋ AGG/VYM を自動取込</span>
-        </div>
-        <div id="reportStatus" class="small mt-1 text-muted"></div>
-      </div>
-
-      <!-- 操作ボタン -->
-      <div class="card p-3 mb-3">
-        <div class="d-flex gap-2 flex-wrap">
-          <button class="btn btn-success btn-sm" id="btnAdd">＋ 個別に追加</button>
-          <button class="btn btn-outline-secondary btn-sm" id="btnExportPort">📥 CSV出力</button>
-          <button class="btn btn-outline-danger btn-sm" id="btnClearPort">🗑 全削除</button>
-        </div>
-      </div>
+      <!-- 自動読み込みステータス（毎平日16:35頃に自動更新される） -->
+      <div id="reportStatus" class="small text-muted mb-2"></div>
 
       <div class="card p-0">
         <div class="table-responsive">
@@ -792,184 +745,11 @@ function acctClass(a) {
 }
 
 // ════════════════════════════════════════
-//  J-Quants API V2
-//  ・localhost 経由 (start_tool.py): /api/jquants/* → プロキシ転送（CORS回避）
-//  ・file:// 直接開く場合: https://api.jquants.com/v2/* 直接（CORSエラーになる）
+//  実行環境判定
+//  ※銘柄データの取得は毎平日16:00の自動バッチ（japan_stocks_fetcher.py）に一本化。
+//    ブラウザからのJ-Quants直接取得は財務データを持たないため廃止した。
 // ════════════════════════════════════════
 const IS_LOCAL = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-const JQ = IS_LOCAL ? '/api/jquants' : 'https://api.jquants.com/v2';
-
-// 直近の確定営業日 YYYYMMDD（当日は引け前の可能性があるため1日前から）
-function lastTradingDate() {
-  const d = new Date();
-  // 1日戻す（当日データがない場合に備えて）
-  d.setDate(d.getDate() - 1);
-  // 土曜→金曜、日曜→金曜
-  const dow = d.getDay();
-  if (dow === 0) d.setDate(d.getDate() - 2);
-  else if (dow === 6) d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0,10).replace(/-/g,'');
-}
-
-document.getElementById('btnJQ').addEventListener('click', async () => {
-  const btn    = document.getElementById('btnJQ');
-  const prog   = document.getElementById('jqProgress');
-  const progTxt= document.getElementById('jqProgressTxt');
-  const status = document.getElementById('jqStatus');
-
-  const apiKey = document.getElementById('jqApiKey').value.trim();
-  if (!apiKey) {
-    status.innerHTML = '<span class="text-danger">❌ APIキーを入力してください（<a href="https://jpx-jquants.com/ja/dashboard" target="_blank">ダッシュボードで発行</a>）</span>';
-    return;
-  }
-
-  btn.disabled = true;
-  prog.classList.remove('d-none');
-  status.textContent = '';
-  const setMsg = m => { progTxt.textContent = m; };
-
-  try {
-    const hdrs = {'x-api-key': apiKey};
-
-    // ① 全銘柄マスタ
-    setMsg('📋 銘柄一覧取得中...');
-    const r1 = await fetch(`${JQ}/equities/master`, {headers: hdrs});
-    if (!r1.ok) {
-      const err = await r1.json().catch(()=>({}));
-      throw new Error(`銘柄一覧失敗 HTTP ${r1.status}: ${err.message || JSON.stringify(err)}`);
-    }
-    const {data: masterData} = await r1.json();
-
-    // ② 短い待機（レートリミット回避）
-    await new Promise(r => setTimeout(r, 2000));
-
-    // ③ 直近営業日の全銘柄株価
-    let dateStr = lastTradingDate();
-    setMsg(`📈 株価取得中 (${dateStr})...`);
-    let priceData = null;
-    let priceErrMsg = '';
-
-    for (let retry = 0; retry < 5; retry++) {
-      const r2 = await fetch(`${JQ}/equities/bars/daily?date=${dateStr}`, {headers: hdrs});
-      if (r2.ok) {
-        const body = await r2.json();
-        priceData = body.data || [];
-        break;
-      }
-      let errBody = {};
-      try { errBody = await r2.json(); } catch {}
-      priceErrMsg = `HTTP ${r2.status}: ${errBody.message || JSON.stringify(errBody)}`;
-
-      if (r2.status === 400) {
-        // サブスクリプション期間外 → エラーから終了日を抽出して再試行
-        const match = (errBody.message || '').match(/~\s*(\d{4}-\d{2}-\d{2})/);
-        if (match) {
-          const endDate = new Date(match[1]);
-          const dow = endDate.getDay();
-          if (dow === 0) endDate.setDate(endDate.getDate() - 2);
-          else if (dow === 6) endDate.setDate(endDate.getDate() - 1);
-          dateStr = endDate.toISOString().slice(0,10).replace(/-/g,'');
-          setMsg(`📈 プラン対象日（${dateStr}）で再取得中...`);
-          await new Promise(r => setTimeout(r, 2000));
-          continue;
-        }
-        break; // 日付情報なし → 諦める
-      }
-
-      if (r2.status === 429) {
-        for (let i = 60; i > 0; i--) {
-          setMsg(`⏳ レートリミット超過、待機中... ${i}秒`);
-          await new Promise(r => setTimeout(r, 1000));
-        }
-      }
-
-      // 通常リトライ: 1日戻す
-      const d = new Date(dateStr.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'));
-      d.setDate(d.getDate() - 1);
-      const dow = d.getDay();
-      if (dow === 0) d.setDate(d.getDate() - 2);
-      else if (dow === 6) d.setDate(d.getDate() - 1);
-      dateStr = d.toISOString().slice(0,10).replace(/-/g,'');
-      setMsg(`📈 株価再取得中 (${dateStr})...`);
-    }
-
-    // 株価取得失敗でも銘柄マスタだけで続行（プラン制限等の場合）
-    const priceMap = {};
-    if (!priceData) {
-      status.innerHTML = `<span class="text-warning">⚠️ 株価データ取得不可（${priceErrMsg}）。銘柄一覧のみ取得します。週次レポートxlsxを読み込むと価格が補完されます。</span>`;
-    } else {
-      // V2では終値フィールドが "C"（V1は "Close"）
-      priceData.forEach(q => { priceMap[q.Code] = q.C ?? q.Close ?? null; });
-    }
-
-    // 既存の配当データを保持
-    const oldDivMap = {};
-    ST.stocks.forEach(s => {
-      if (s.dividendAmount || s.dividendYield)
-        oldDivMap[s.code] = { div: s.dividendAmount, yld: s.dividendYield };
-    });
-
-    // V2フィールド: Code, CoName, S33Nm(33業種名), MktNm(市場名)
-    const seen = new Set();
-    const newStocks = [];
-    for (const s of (masterData || [])) {
-      const code5 = String(s.Code || '');
-      const code4 = code5.slice(0, 4);
-      if (!/^\d{4}$/.test(code4)) continue;
-      if (seen.has(code4)) continue;
-      seen.add(code4);
-
-      const old = oldDivMap[code4] || {};
-      newStocks.push({
-        code:           code4,
-        name:           s.CoName   || '',
-        sector:         s.S33Nm    || '不明',
-        market:         s.MktNm    || '',
-        price:          priceMap[code5] ?? null,
-        dividendAmount: old.div ?? null,
-        dividendYield:  old.yld ?? null,
-        per: null, pbr: null, roe: null,
-      });
-    }
-
-    // 米国ETF等の非日本株を維持
-    ST.stocks.filter(s => !/^\d{4}$/.test(s.code)).forEach(s => {
-      if (!newStocks.find(n => n.code === s.code)) newStocks.push(s);
-    });
-
-    ST.stocks = newStocks;
-    // APIキーを保存（ページ再読み込み後も使えるように）
-    localStorage.setItem('jq_apikey', apiKey);
-    ST.save();
-
-    document.getElementById('lastUpdated').textContent =
-      `J-Quants V2更新: ${new Date().toLocaleString('ja-JP')} | ${newStocks.length.toLocaleString()}銘柄`;
-    const priceNote = priceData
-      ? `株価 ${priceData.length.toLocaleString()}件 / ${dateStr}`
-      : `株価なし（${priceErrMsg}）`;
-    if (priceData) {
-      status.textContent = `✅ ${newStocks.length.toLocaleString()}銘柄取得完了（${priceNote}）`;
-    } else {
-      status.innerHTML += `<br>✅ ${newStocks.length.toLocaleString()}銘柄の銘柄一覧を取得しました（${priceNote}）`;
-    }
-    renderAll();
-
-  } catch(e) {
-    let msg = String(e.message || e);
-    if (msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('cors') ||
-        msg.toLowerCase().includes('network') || msg.toLowerCase().includes('load')) {
-      msg = `CORS制限エラーです。HTMLをファイルで直接開いている場合、外部APIへのアクセスがブロックされます。\n\n` +
-            `【解決方法】\n` +
-            `  1. start_tool.py を dividend_tool.html と同じフォルダに置く\n` +
-            `  2. コマンドプロンプトで: python start_tool.py\n` +
-            `  3. 自動で開く http://localhost:8080 でツールを使う`;
-    }
-    status.innerHTML = `<span class="text-danger">❌ ${msg}</span>`;
-  } finally {
-    btn.disabled = false;
-    prog.classList.add('d-none');
-  }
-});
 
 // ════════════════════════════════════════
 //  株価取得（yfinance 経由 /api/prices）
@@ -987,7 +767,7 @@ document.getElementById('btnYahoo').addEventListener('click', async () => {
 
   const codes = ST.stocks.filter(s => /^\d{4}$/.test(s.code)).map(s => s.code);
   if (!codes.length) {
-    statusEl.textContent = '⚠️ 先にJ-Quantsまたはxlsxで銘柄を読み込んでください';
+    statusEl.textContent = '⚠️ 銘柄データがまだ読み込まれていません';
     return;
   }
 
@@ -1054,20 +834,8 @@ document.getElementById('btnYahoo').addEventListener('click', async () => {
   }
 });
 
-document.getElementById('btnJQClear').addEventListener('click', () => {
-  document.getElementById('jqApiKey').value = '';
-  localStorage.removeItem('jq_apikey');
-  document.getElementById('jqStatus').textContent = 'APIキーをクリアしました';
-});
-
-// 起動時にAPIキーを復元
-{
-  const saved = localStorage.getItem('jq_apikey');
-  if (saved) document.getElementById('jqApiKey').value = saved;
-}
-
 // ════════════════════════════════════════
-//  japan_stocks xlsx インポート
+//  japan_stocks xlsx 読み込み（localhost自動読み込み用）
 // ════════════════════════════════════════
 // silent=true: ダイアログなし（自動読み込み用）
 function processStocksXlsx(arrayBuffer, filename, silent) {
@@ -1121,15 +889,6 @@ function processStocksXlsx(arrayBuffer, filename, silent) {
     else console.error('[auto-load stocks]', err);
   }
 }
-
-document.getElementById('xlsxInput').addEventListener('change', function(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = ev => processStocksXlsx(ev.target.result, file.name, false);
-  reader.readAsArrayBuffer(file);
-  e.target.value = '';
-});
 
 // ── 起動時に最新銘柄データを自動読み込み（localhost のみ）──
 // 同じファイルが既にロード済みの場合はスキップして高速起動
@@ -1258,16 +1017,6 @@ function processPortfolioXlsx(arrayBuffer, filename, silent) {
     console.error(err);
   }
 }
-
-document.getElementById('reportXlsxInput').addEventListener('change', function(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  document.getElementById('reportStatus').textContent = '読み込み中...';
-  const reader = new FileReader();
-  reader.onload = ev => processPortfolioXlsx(ev.target.result, file.name, false);
-  reader.readAsArrayBuffer(file);
-  e.target.value = '';
-});
 
 // ── 起動時に最新ポートフォリオを自動読み込み（localhost のみ）──
 async function autoLoadPortfolio() {
@@ -1818,7 +1567,7 @@ function renderPortfolio() {
   const tbody = document.getElementById('portTbody');
   if (!ST.portfolio.length) {
     tbody.innerHTML = `<tr><td colspan="16" class="text-center text-muted py-4">
-      保有銘柄がありません。「週次レポートを読み込む」または「＋ 個別に追加」で登録してください。
+      保有銘柄がありません。毎平日16:35頃の自動更新、または銘柄データタブの「＋追加」で登録されます。
     </td></tr>`;
     return;
   }
@@ -2213,10 +1962,6 @@ document.getElementById('btnSave').addEventListener('click', () => {
   renderAll();
 });
 
-document.getElementById('btnAdd').addEventListener('click', ()=>openAdd());
-document.getElementById('btnClearPort').addEventListener('click', ()=>{
-  if (confirm('全保有銘柄を削除しますか？')) { ST.portfolio=[]; ST.save(); renderAll(); }
-});
 function updateRank(i, v) {
   const code = ST.portfolio[i].code;
   ST.portfolio[i].rank = v || null;
@@ -2254,22 +1999,6 @@ function dlCSV(csv, name) {
   a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
   a.download = name; a.click();
 }
-
-document.getElementById('btnExportPort').addEventListener('click', ()=>{
-  const hdr = ['口座','コード','銘柄名','業種','保有株数','取得単価','現在株価','評価額','損益率','簿価利回り','現在利回り','年間配当','評価ランク','コメント'];
-  const rows = ST.portfolio.map(p=>{
-    const s=ST.stocks.find(s=>s.code===p.code);
-    const px=+s?.price||0, acq=+p.acqPrice||0, sh=+p.shares||0;
-    return [p.account||'', p.code, s?.name||'', s?.sector||'', sh, acq,
-            px||'', px?Math.round(px*sh):'',
-            acq&&px?((px/acq-1)*100).toFixed(1)+'%':'',
-            acq&&+s?.dividendAmount?(+s.dividendAmount/acq*100).toFixed(2)+'%':'',
-            getYield(s)>0?getYield(s).toFixed(2)+'%':'',
-            +s?.dividendAmount&&sh?Math.round(+s.dividendAmount*sh):'',
-            getStockRank(p.code)||'', p.comment||''];
-  });
-  dlCSV(toCSV([hdr,...rows]), `portfolio_${new Date().toISOString().slice(0,10)}.csv`);
-});
 
 document.getElementById('btnExportBuy').addEventListener('click', ()=>{
   const minScore = +document.getElementById('fMinScore').value||55;
@@ -2647,11 +2376,6 @@ ST.load();
 
 // 同期ステータス初期化
 syncIndicator(SYNC.canPush() ? 'ok' : 'readonly');
-
-// localhost以外ではCORS警告を表示
-if (!IS_LOCAL) {
-  document.getElementById('jqLocalWarning').classList.remove('d-none');
-}
 
 if (ST.stocks.length) {
   document.getElementById('lastUpdated').textContent =
