@@ -740,20 +740,6 @@ const ST = {
     localStorage.setItem('div_updated_at', new Date().toISOString());
     // GitHub 自動プッシュ（連続編集は2.5秒デバウンスでまとめて送信）
     if (typeof SYNC !== 'undefined' && SYNC.canPush()) SYNC.schedulePush();
-    // localhost経由の場合: 保有データを holdings.json に自動保存
-    if (typeof IS_LOCAL !== 'undefined' && IS_LOCAL && this.portfolio.length > 0) {
-      const holdings = this.portfolio.map(p => ({
-        code:     p.code,
-        account:  p.account || '',
-        shares:   p.shares  || 0,
-        acqPrice: p.acqPrice || 0,
-      }));
-      fetch('/api/save-holdings', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(holdings),
-      }).catch(() => {});  // エラーは無視
-    }
   },
   load() {
     try {
