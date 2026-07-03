@@ -473,6 +473,7 @@ th.has-filter .fd-icon { opacity:1; }
               <th class="sortable text-end" data-sort="buy" data-col="price">株価</th>
               <th class="sortable text-end" data-sort="buy" data-col="curY">現在利回り</th>
               <th class="sortable text-end" data-sort="buy" data-col="annDiv">年間配当額</th>
+              <th class="sortable" data-sort="buy" data-col="account">保有口座</th>
               <th class="sortable text-center" data-sort="buy" data-col="rank">評価</th>
               <th class="sortable text-end" data-sort="buy" data-col="yPt">利回Pt</th>
               <th class="sortable text-end" data-sort="buy" data-col="rPt">ランクPt</th>
@@ -774,6 +775,11 @@ const COL_MAP = {
   'ROE(%)':'roe','時価総額':'marketCap','営業利益率(%)':'operatingMargin',
   '自己資本比率(%)':'equityRatio','売上高':'sales',
 };
+
+// 銘柄コード → 保有口座一覧（未保有なら空配列）
+function buyAccounts(code) {
+  return [...new Set(ST.portfolio.filter(p => p.code === code && p.account).map(p => p.account))];
+}
 
 // 口座名 → CSSクラス
 function acctClass(a) {
@@ -1419,12 +1425,12 @@ function renderDash() {
   }
   document.getElementById('d-annDiv').textContent = annDiv > 0 ? '¥'+fN(Math.round(annDiv)) : '-';
 
-  // 買い候補数
+  // 買い候補数（買い候補タブと同じ条件: 保留銘柄は除外）
   const minScore = +document.getElementById('fMinScore')?.value || 55;
   const minYield = +document.getElementById('fMinYield')?.value || 2;
   const allBuy = ST.stocks
-    .map(s => ({...s, sc:calcScore(s.code), p:ST.portfolio.find(p=>p.code===s.code)}))
-    .filter(s => s.sc?.isBuy && getYield(s)>=minYield)
+    .map(s => ({...s, sc:calcScore(s.code)}))
+    .filter(s => s.sc?.isBuy && !ST.paused[s.code] && getYield(s)>=minYield)
     .sort((a,b) => b.sc.total - a.sc.total);
   document.getElementById('d-buyCount').textContent = allBuy.length;
 
@@ -1433,14 +1439,17 @@ function renderDash() {
     ? '<p class="text-muted small">条件に合う候補がありません</p>'
     : `<table class="table table-sm table-hover"><thead><tr>
         <th>#</th><th>コード</th><th>銘柄名</th><th>業種</th>
-        <th class="text-end">利回り</th><th class="text-center">評価</th><th class="text-center">スコア</th>
-      </tr></thead><tbody>${allBuy.slice(0,10).map((s,i)=>`<tr>
+        <th class="text-end">利回り</th><th class="text-center">評価</th><th class="text-center">スコア</th><th>保有口座</th>
+      </tr></thead><tbody>${allBuy.slice(0,10).map((s,i)=>{
+        const accts = buyAccounts(s.code);
+        return `<tr>
         <td>${i+1}</td><td><code>${s.code}</code></td><td>${s.name||'-'}</td>
         <td><small class="text-muted">${s.sector||'-'}</small></td>
         <td class="text-end text-success fw-bold">${fY(getYield(s))}</td>
         <td class="text-center">${rankBadge(getStockRank(s.code))}</td>
         <td class="text-center"><span class="score-pill" style="background:${scoreColor(s.sc.total)}22;color:${scoreColor(s.sc.total)}">${s.sc.total}</span></td>
-      </tr>`).join('')}</tbody></table>`;
+        <td><small>${accts.length ? accts.map(a=>acctBadge(a)||a).join('<br>') : '<span class="text-muted">-</span>'}</small></td>
+      </tr>`;}).join('')}</tbody></table>`;
 
   // ドーナツチャート（業種別）
   const labels = Object.keys(vals);
@@ -1664,6 +1673,7 @@ function colUniqueValues(table, col) {
       .map(s => {
         if (col==='sector') return String(s.sector||'');
         if (col==='rank')   return String(getStockRank(s.code)||'');
+        if (col==='account')return buyAccounts(s.code).join('・');
         return '';
       }))];
   }
@@ -1954,6 +1964,7 @@ function renderBuy() {
       case 'sector': return s.sector || '';
       case 'price':  return s.price || 0;
       case 'curY':   return getYield(s);
+      case 'account':return buyAccounts(s.code).join('・');
       case 'rank':   return getStockRank(s.code);
       case 'yPt':    return s.sc.yPt;
       case 'rPt':    return s.sc.rPt;
@@ -1973,6 +1984,7 @@ function renderBuy() {
       case 'sector': return dir * (a.sector||'').localeCompare(b.sector||'');
       case 'price':  return dir * ((+a.price||0)-(+b.price||0));
       case 'curY':   return dir * (getYield(a)-getYield(b));
+      case 'account':return dir * buyAccounts(a.code).join('・').localeCompare(buyAccounts(b.code).join('・'),'ja');
       case 'rank':   return dir * ((RANK_ORDER[getStockRank(a.code)]??5)-(RANK_ORDER[getStockRank(b.code)]??5));
       case 'yPt':    return dir * (a.sc.yPt-b.sc.yPt);
       case 'rPt':    return dir * (a.sc.rPt-b.sc.rPt);
@@ -1985,7 +1997,7 @@ function renderBuy() {
 
   const tbody = document.getElementById('buyTbody');
   if (!filteredScored.length) {
-    tbody.innerHTML = `<tr><td colspan="17" class="text-center text-muted py-4">条件に合う銘柄がありません</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="18" class="text-center text-muted py-4">条件に合う銘柄がありません</td></tr>`;
     return;
   }
 
@@ -2005,17 +2017,22 @@ function renderBuy() {
     const annDivCell = annDivAmt !== null
       ? `<span class="text-primary fw-bold">¥${fN(annDivAmt)}</span>`
       : '<span class="text-muted">-</span>';
-    return { rank, col, flag, selHtml, annDivCell };
+    const accts    = buyAccounts(s.code);
+    const acctCell = accts.length
+      ? accts.map(a => acctBadge(a) || a).join('<br>')
+      : '<span class="text-muted">-</span>';
+    return { rank, col, flag, selHtml, annDivCell, accts, acctCell };
   };
 
   tbody.innerHTML = filteredScored.map((s,i)=>{
-    const {col,flag,selHtml,annDivCell} = rowHtml(s,i);
+    const {col,flag,selHtml,annDivCell,acctCell} = rowHtml(s,i);
     return `<tr class="${i<3?'table-warning':''}">
       <td>${i+1}</td><td><code>${s.code}</code></td><td>${s.name||'-'}</td>
       <td><small class="text-muted">${s.sector||'-'}</small></td>
       <td class="text-end">${fN(s.price)}</td>
       <td class="text-end fw-bold text-success">${fY(getYield(s))}</td>
       <td class="text-end">${annDivCell}</td>
+      <td><small>${acctCell}</small></td>
       <td class="text-center">${selHtml}</td>
       <td class="text-end">${s.sc.yPt}</td>
       <td class="text-end">${s.sc.rPt}</td>
@@ -2036,8 +2053,10 @@ function renderBuy() {
 
   // スマホ用カード
   document.getElementById('buyCards').innerHTML = filteredScored.map((s,i)=>{
-    const {rank, col, flag, selHtml, annDivCell} = rowHtml(s,i);
+    const {rank, col, flag, selHtml, annDivCell, accts} = rowHtml(s,i);
     const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}.`;
+    const acctLine = accts.length
+      ? `<div class="small mb-2">${accts.map(a => acctBadge(a) || a).join(' ')}</div>` : '';
     return `<div class="buy-card${i<3?' border border-warning':''}">
       <div class="d-flex justify-content-between align-items-start mb-1">
         <div>
@@ -2048,6 +2067,7 @@ function renderBuy() {
         <div class="buy-card-score" style="color:${col}">${s.sc.total}</div>
       </div>
       <div class="text-muted small mb-2">${s.sector||'-'}</div>
+      ${acctLine}
       <div class="d-flex gap-3 mb-2 small">
         <span>株価 <strong>${fN(s.price)}</strong></span>
         <span>利回り <strong class="text-success">${fY(getYield(s))}</strong></span>
