@@ -712,6 +712,17 @@ function getYield(s) {
 // 日本語文字を含むか判定（銘柄名の上書き防止に使用）
 const isJapanese = s => /[぀-鿿]/.test(s || '');
 
+// ── 検索キャッシュ ──────────────────────────
+// 全銘柄（約4,400件）の線形検索と業種別配当集計を毎回やり直すと
+// 買い候補タブの描画が銘柄数×PF数×銘柄数のオーダーになり非常に重い。
+// データ変更時（ST.save / pull / renderAll）にのみ再構築する。
+let _stockMap = null, _divWCache = null;
+function stockByCode(code) {
+  if (!_stockMap) _stockMap = new Map(ST.stocks.map(s => [s.code, s]));
+  return _stockMap.get(code);
+}
+function invalidateCaches() { _stockMap = null; _divWCache = null; }
+
 const ST = {
   stocks: [],
   // portfolio item: {code, account, shares, acqPrice, comment}
@@ -721,13 +732,14 @@ const ST = {
   // 買い候補保留フラグ {code: true} （ポートフォリオ銘柄のみ）
   paused: {},
   save() {
+    invalidateCaches();
     localStorage.setItem('div_stocks',    JSON.stringify(this.stocks));
     localStorage.setItem('div_portfolio', JSON.stringify(this.portfolio));
     localStorage.setItem('div_ranks',     JSON.stringify(this.ranks));
     localStorage.setItem('div_paused',    JSON.stringify(this.paused));
     localStorage.setItem('div_updated_at', new Date().toISOString());
-    // GitHub 自動プッシュ（fire-and-forget、トークンがある場合のみ）
-    if (typeof SYNC !== 'undefined' && SYNC.canPush()) SYNC.push().catch(()=>{});
+    // GitHub 自動プッシュ（連続編集は2.5秒デバウンスでまとめて送信）
+    if (typeof SYNC !== 'undefined' && SYNC.canPush()) SYNC.schedulePush();
     // localhost経由の場合: 保有データを holdings.json に自動保存
     if (typeof IS_LOCAL !== 'undefined' && IS_LOCAL && this.portfolio.length > 0) {
       const holdings = this.portfolio.map(p => ({
@@ -1286,7 +1298,7 @@ const RANK_PT  = {'★':40,'●':25,'優待':0,'〇':0,'×':0};
 const RANK_CSS = {'★':'rank-★','●':'rank-●','優待':'rank-優待','〇':'rank-〇','×':'rank-×'};
 // 自動除外条件チェック（営業利益率≤1% / 自己資本比率≤20% / 時価総額≤100億 or 未表示）
 function isAutoExcluded(code) {
-  const s = ST.stocks.find(s => s.code === code);
+  const s = stockByCode(code);
   if (!s) return false;
   const margin = s.operatingMargin != null ? +s.operatingMargin : null;
   const equity = s.equityRatio     != null ? +s.equityRatio     : null;
@@ -1310,7 +1322,7 @@ function sectorWeights() {
   const vals = {};
   let total = 0;
   for (const p of ST.portfolio) {
-    const s   = ST.stocks.find(s => s.code === p.code);
+    const s   = stockByCode(p.code);
     const px  = +s?.price || +p.acqPrice || 0;
     const val = px * (+p.shares || 0);
     const sec = s?.sector || '不明';
@@ -1325,7 +1337,7 @@ function sectorDivWeights() {
   const vals = {};
   let total = 0;
   for (const p of ST.portfolio) {
-    const s      = ST.stocks.find(s => s.code === p.code);
+    const s      = stockByCode(p.code);
     const divAmt = (+s?.dividendAmount || 0) * (+p.shares || 0);
     const sec    = s?.sector || '不明';
     vals[sec] = (vals[sec] || 0) + divAmt;
@@ -1335,8 +1347,7 @@ function sectorDivWeights() {
 }
 
 function calcScore(code) {
-  const s = ST.stocks.find(s => s.code === code);
-  const p = ST.portfolio.find(p => p.code === code);
+  const s = stockByCode(code);
   if (!s) return null;
 
   const rank = getStockRank(code);
@@ -1356,7 +1367,8 @@ function calcScore(code) {
              :               0;
   const rPt  = rank ? (RANK_PT[rank] ?? 0) : 0;
 
-  const { vals: divVals, total: divTotal } = sectorDivWeights();
+  if (!_divWCache) _divWCache = sectorDivWeights();
+  const { vals: divVals, total: divTotal } = _divWCache;
   const sec = s.sector || '不明';
   let dPt = 30;
   if (divTotal > 0) {
@@ -1928,8 +1940,9 @@ function renderBuy() {
   document.getElementById('fSector').innerHTML = '<option value="">全業種</option>' +
     sectors.map(s=>`<option${s===fCur?' selected':''}>${s}</option>`).join('');
 
+  const portMap = new Map(ST.portfolio.map(p => [p.code, p]));
   const scored = ST.stocks
-    .map(s => ({...s, sc:calcScore(s.code), p:ST.portfolio.find(p=>p.code===s.code)}))
+    .map(s => ({...s, sc:calcScore(s.code), p:portMap.get(s.code)}))
     .filter(s => {
       if (!s.sc || s.sc.total<=0) return false;
       if (ST.paused[s.code]) return false;
@@ -2067,7 +2080,7 @@ function renderBuy() {
   }).join('');
 }
 
-function renderAll() { renderDash(); renderStocks(); renderPortfolio(); renderBuy(); }
+function renderAll() { invalidateCaches(); renderDash(); renderStocks(); renderPortfolio(); renderBuy(); }
 
 // ════════════════════════════════════════
 //  ランク エクスポート / インポート
@@ -2314,6 +2327,13 @@ const SYNC = {
 
   token: localStorage.getItem('div_sync_token') || '',
   _busy: false,
+  _pushTimer: null,
+
+  // 自動プッシュ用: 連続編集を1回の送信にまとめる（最後の変更が必ず送られる）
+  schedulePush(delay = 2500) {
+    clearTimeout(this._pushTimer);
+    this._pushTimer = setTimeout(() => { this._pushTimer = null; this.push().catch(() => {}); }, delay);
+  },
 
   isReady() { return true; },         // pull は常に可能
   canPush()  { return !!this.token; }, // push はトークンが必要
@@ -2374,6 +2394,7 @@ const SYNC = {
         }
         if (changed) {
           localStorage.setItem('div_updated_at', remote.updatedAt || new Date().toISOString());
+          invalidateCaches();
         }
       }
       syncIndicator(this.canPush() ? 'ok' : 'readonly');
@@ -2385,7 +2406,8 @@ const SYNC = {
   },
 
   async push() {
-    if (!this.canPush() || this._busy) return false;
+    if (!this.canPush()) return false;
+    if (this._busy) { this.schedulePush(1500); return false; }  // 送信中なら後で再送
     this._busy = true;
     syncIndicator('loading');
     try {
@@ -2560,6 +2582,7 @@ async function manualPull() {
 
 async function manualPush() {
   if (!SYNC.canPush()) { showToast('トークンが設定されていません', 'warning'); return; }
+  clearTimeout(SYNC._pushTimer);  // 予約中の自動送信は今すぐ送るので不要
   // _busy の場合は少し待ってリトライ
   if (SYNC._busy) {
     await new Promise(r => setTimeout(r, 1500));
@@ -2601,6 +2624,15 @@ function showToast(msg, type='info') {
   c.appendChild(t);
   setTimeout(() => t.remove(), 3000);
 }
+
+// タブを閉じる/バックグラウンドに回した時、送信待ちがあれば即送信
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && SYNC._pushTimer) {
+    clearTimeout(SYNC._pushTimer);
+    SYNC._pushTimer = null;
+    SYNC.push().catch(() => {});
+  }
+});
 
 // ════════════════════════════════════════
 //  INIT
