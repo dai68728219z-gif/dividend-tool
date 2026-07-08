@@ -2361,11 +2361,17 @@ function showToast(msg, type='info') {
 }
 
 // タブを閉じる/バックグラウンドに回した時、送信待ちがあれば即送信
+// タブに戻ってきた時は最新データを取得（開きっぱなしのPC対策）
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden' && SYNC._pushTimer) {
     clearTimeout(SYNC._pushTimer);
     SYNC._pushTimer = null;
     SYNC.push().catch(() => {});
+  } else if (document.visibilityState === 'visible') {
+    // 送信待ちの自分の変更がある時はpullしない（上書き防止）
+    if (!SYNC._pushTimer && !SYNC._busy) {
+      SYNC.pull().then(r => { if (r === 'updated') renderAll(); }).catch(() => {});
+    }
   }
 });
 
@@ -2382,17 +2388,18 @@ if (ST.stocks.length) {
     `登録済: ${ST.stocks.length.toLocaleString()}銘柄`;
 }
 
-// まずローカルデータで即描画、その後GitHubからpullして差分があれば再描画
+// まずローカルデータで即描画。
+// その後、必ず GitHub pull → ローカルxlsx自動読み込み の順で実行する。
+// ※同時に走らせると自動読み込みの保存が先に完了した場合、
+//   ローカルが「最新」扱いになってpullがスキップされ、
+//   さらに他端末の変更（保留・ランク）を上書き送信してしまうため。
 renderAll();
-SYNC.pull().then(result => {
+(async () => {
+  const result = await SYNC.pull().catch(() => null);
   if (result === 'updated') {
     renderAll();
     showToast('GitHubから最新データを取得しました', 'success');
   }
-}).catch(() => {});
-
-// localhost起動時: 銘柄データ → ポートフォリオ の順に自動読み込み
-(async () => {
   await autoLoadStocks();    // japan_stocks_*.xlsx（新しいファイルがある時のみ）
   await autoLoadPortfolio(); // portfolio_report_*.xlsx（毎回）
 })();
