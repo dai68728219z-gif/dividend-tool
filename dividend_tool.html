@@ -1106,6 +1106,10 @@ function calcScore(code) {
              : yld >= 3.7 ? 8
              : yld >= 3.5 ? 4
              :               0;
+
+  // 利回りポイント0（利回り3.5%未満）は買い候補の対象外
+  if (yPt === 0) return { total:0, yPt:0, rPt:0, dPt:0, isBuy:false, isWatch:false };
+
   const rPt  = rank ? (RANK_PT[rank] ?? 0) : 0;
 
   if (!_divWCache) _divWCache = sectorDivWeights();
@@ -1115,14 +1119,15 @@ function calcScore(code) {
   if (divTotal > 0) {
     const nSec  = Object.keys(divVals).length || 1;
     const tgt   = 1 / nSec;
-    const act   = (divVals[sec] || 0) / divTotal;
     // ratio = 実際の配当比率 / 目標比率（0=未保有, 1=目標通り）
     const ratio = ((divVals[sec] || 0) / divTotal) / tgt;
-    // 目標以下: 3pt/0.2刻み（緩やか）, 目標以上: 4pt/0.2刻み（やや速く）
-    dPt = ratio === 0 ? 30
-        : ratio < 0.4 ? 25
-        : ratio < 0.8 ? 20
-        : ratio < 1.0 ? 15
+    // 目標以下(ratio<1)を0.2刻みで細分化、目標以上は従来通り
+    dPt = ratio === 0   ? 30   // 未保有業種
+        : ratio < 0.2 ? 27
+        : ratio < 0.4 ? 24
+        : ratio < 0.6 ? 20
+        : ratio < 0.8 ? 16
+        : ratio < 1.0 ? 12
         : ratio < 1.4 ? 9
         : ratio < 1.8 ? 4
         : ratio < 2.0 ? 1
@@ -2110,30 +2115,43 @@ const SYNC = {
       const localTs = localStorage.getItem('div_updated_at') || '';
 
       let changed = false;
+
+      // ── ランク・保留はマルチデバイス編集対象のため、時刻に関係なく常にGitHub側を正とする ──
+      // （PCは自動読み込みで毎回保存するためローカル時刻が常に新しくなり、
+      //   時刻比較だとスマホの変更を永久に取り込めない）
+      if (remote.ranks && Object.keys(remote.ranks).length) {
+        const rj = JSON.stringify(remote.ranks);
+        if (rj !== JSON.stringify(ST.ranks)) {
+          ST.ranks = remote.ranks; changed = true;
+          localStorage.setItem('div_ranks', rj);
+        }
+      }
+      if (remote.paused) {
+        const pj = JSON.stringify(remote.paused);
+        if (pj !== JSON.stringify(ST.paused)) {
+          ST.paused = remote.paused; changed = true;
+          localStorage.setItem('div_paused', pj);
+        }
+      }
+
+      // ── 銘柄・ポートフォリオはサイズが大きいため従来通り時刻比較で取り込む ──
+      let dataChanged = false;
       if (force || !localTs || (remote.updatedAt && remote.updatedAt > localTs)) {
         if (Array.isArray(remote.stocks) && remote.stocks.length) {
-          ST.stocks = remote.stocks; changed = true;
+          ST.stocks = remote.stocks; dataChanged = true;
           localStorage.setItem('div_stocks', JSON.stringify(ST.stocks));
         }
         if (Array.isArray(remote.portfolio) && remote.portfolio.length) {
-          ST.portfolio = remote.portfolio; changed = true;
+          ST.portfolio = remote.portfolio; dataChanged = true;
           localStorage.setItem('div_portfolio', JSON.stringify(ST.portfolio));
         }
-        if (remote.ranks) {
-          ST.ranks = Object.assign({}, ST.ranks, remote.ranks); changed = true;
-          localStorage.setItem('div_ranks', JSON.stringify(ST.ranks));
-        }
-        if (remote.paused) {
-          ST.paused = Object.assign({}, ST.paused, remote.paused); changed = true;
-          localStorage.setItem('div_paused', JSON.stringify(ST.paused));
-        }
-        if (changed) {
+        if (dataChanged) {
           localStorage.setItem('div_updated_at', remote.updatedAt || new Date().toISOString());
-          invalidateCaches();
         }
       }
+      if (changed || dataChanged) invalidateCaches();
       syncIndicator(this.canPush() ? 'ok' : 'readonly');
-      return changed ? 'updated' : 'same';
+      return (changed || dataChanged) ? 'updated' : 'same';
     } catch(e) {
       syncIndicator('error', e.message);
       return null;
