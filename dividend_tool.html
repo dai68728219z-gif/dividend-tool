@@ -1121,15 +1121,13 @@ function calcScore(code) {
     const tgt   = 1 / nSec;
     // ratio = 実際の配当比率 / 目標比率（0=未保有, 1=目標通り）
     const ratio = ((divVals[sec] || 0) / divTotal) / tgt;
-    // 目標以下(ratio<1)を0.2刻みで細分化、目標以上は従来通り
+    // ratio<1 は0.2刻みで5点ずつ、1〜2は1点、2以上は0点
     dPt = ratio === 0   ? 30   // 未保有業種
-        : ratio < 0.2 ? 27
-        : ratio < 0.4 ? 24
-        : ratio < 0.6 ? 20
-        : ratio < 0.8 ? 16
-        : ratio < 1.0 ? 12
-        : ratio < 1.4 ? 9
-        : ratio < 1.8 ? 4
+        : ratio < 0.2 ? 25
+        : ratio < 0.4 ? 20
+        : ratio < 0.6 ? 15
+        : ratio < 0.8 ? 10
+        : ratio < 1.0 ? 5
         : ratio < 2.0 ? 1
         : 0;
   }
