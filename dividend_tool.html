@@ -296,6 +296,7 @@ th.has-filter .fd-icon { opacity:1; }
               <th class="sortable" data-sort="port" data-col="code">コード</th>
               <th class="sortable" data-sort="port" data-col="name">銘柄名</th>
               <th class="sortable" data-sort="port" data-col="sector">業種</th>
+              <th class="sortable" data-sort="port" data-col="category">分類</th>
               <th class="sortable text-end" data-sort="port" data-col="shares">保有株数</th>
               <th class="sortable text-end" data-sort="port" data-col="acqPrice">取得単価</th>
               <th class="sortable text-end" data-sort="port" data-col="price">現在株価</th>
@@ -685,12 +686,15 @@ const ST = {
   ranks: {},
   // 買い候補保留フラグ {code: true} （ポートフォリオ銘柄のみ）
   paused: {},
+  // 12分類の手動上書き {code: '1-1'等} （自動判定と異なる場合のみ格納）
+  categories: {},
   save() {
     invalidateCaches();
     localStorage.setItem('div_stocks',    JSON.stringify(this.stocks));
     localStorage.setItem('div_portfolio', JSON.stringify(this.portfolio));
     localStorage.setItem('div_ranks',     JSON.stringify(this.ranks));
     localStorage.setItem('div_paused',    JSON.stringify(this.paused));
+    localStorage.setItem('div_categories',JSON.stringify(this.categories));
     localStorage.setItem('div_updated_at', new Date().toISOString());
     // GitHub 自動プッシュ（連続編集は2.5秒デバウンスでまとめて送信）
     if (typeof SYNC !== 'undefined' && SYNC.canPush()) SYNC.schedulePush();
@@ -701,6 +705,8 @@ const ST = {
       const p = localStorage.getItem('div_portfolio');
       const r = localStorage.getItem('div_ranks');
       const z = localStorage.getItem('div_paused');
+      const c = localStorage.getItem('div_categories');
+      if (c) this.categories = JSON.parse(c);
       if (s) {
         this.stocks = JSON.parse(s);
         // 旧データの利回り100倍エラーを修正
@@ -728,6 +734,62 @@ const COL_MAP = {
   'ROE(%)':'roe','時価総額':'marketCap','営業利益率(%)':'operatingMargin',
   '自己資本比率(%)':'equityRatio','売上高':'sales',
 };
+
+// ── 銘柄12分類 ──────────────────────────
+// 33業種からの自動判定 + 手動上書き（ST.categories、端末間で同期）
+const CAT_SHORT = {
+  '1-1':'1-1 インフラ',            '1-2':'1-2 非インフラ',
+  '2-1':'2-1 銀行',                '2-2':'2-2 保険・リース',
+  '3-1':'3-1 製造',                '3-2':'3-2 素材・化学',
+  '3-3':'3-3 建設・物流・外需・市況',
+  '4-1':'4-1 IT・ストック',        '4-2':'4-2 その他安定・内需',
+  '5-1':'5-1 市場インフラ',        '5-2':'5-2 不動産・REIT',
+  '5-3':'5-3 海外ETF',
+};
+const CAT_GROUPS = {
+  '①ディフェンシブ':   ['1-1','1-2'],
+  '②金利敏感':         ['2-1','2-2'],
+  '③景気敏感':         ['3-1','3-2','3-3'],
+  '④準ディフェンシブ': ['4-1','4-2'],
+  '⑤特殊枠':           ['5-1','5-2','5-3'],
+};
+const SECTOR_CAT = {
+  '電気・ガス業':'1-1',
+  '水産・農林業':'1-2','食料品':'1-2','医薬品':'1-2',
+  '銀行業':'2-1',
+  '保険業':'2-2','その他金融業':'2-2',
+  '機械':'3-1','輸送用機器':'3-1','電気機器':'3-1','精密機器':'3-1','ゴム製品':'3-1',
+  '化学':'3-2','鉄鋼':'3-2','非鉄金属':'3-2','金属製品':'3-2',
+  'ガラス・土石製品':'3-2','パルプ・紙':'3-2','繊維製品':'3-2',
+  '建設業':'3-3','卸売業':'3-3','鉱業':'3-3','石油・石炭製品':'3-3',
+  '海運業':'3-3','空運業':'3-3','陸運業':'3-3','倉庫・運輸関連業':'3-3',
+  '情報・通信業':'4-1',
+  '小売業':'4-2','サービス業':'4-2','その他製品':'4-2',
+  '証券・商品先物取引業':'5-1',
+  '不動産業':'5-2',
+};
+function defaultCategory(code) {
+  if (!/^\d{4}$/.test(String(code))) return '5-3';          // 海外ETF（AGG/VYM等）
+  const s = stockByCode(code);
+  if (/REIT|リート/i.test((s?.name||'') + (s?.sector||''))) return '5-2';
+  return SECTOR_CAT[s?.sector] || '4-2';
+}
+function getCategory(code) {
+  return ST.categories[code] || defaultCategory(code);
+}
+function updateCategory(code, v) {
+  if (v && v !== defaultCategory(code)) ST.categories[code] = v;
+  else delete ST.categories[code];   // 自動判定と同じ値なら保存しない
+  ST.save();
+}
+function catSelectHtml(code) {
+  const cur = getCategory(code);
+  return Object.entries(CAT_GROUPS).map(([g, ids]) =>
+    `<optgroup label="${g}">` +
+    ids.map(id => `<option value="${id}" ${cur===id?'selected':''}>${CAT_SHORT[id]}</option>`).join('') +
+    `</optgroup>`
+  ).join('');
+}
 
 // 銘柄コード → 保有口座一覧（未保有なら空配列）
 function buyAccounts(code) {
@@ -1414,6 +1476,7 @@ function colUniqueValues(table, col) {
       if (col==='code')    return String(p.code||'');
       if (col==='name')    return String(s?.name||'');
       if (col==='sector')  return String(s?.sector||'');
+      if (col==='category')return String(CAT_SHORT[getCategory(p.code)]||'');
       if (col==='rank')    return String(getStockRank(p.code)||'');
       return '';
     }))];
@@ -1569,7 +1632,7 @@ const RANK_ORDER = {'★':0,'●':1,'優待':2,'〇':3,'×':4,'':5};
 function renderPortfolio() {
   const tbody = document.getElementById('portTbody');
   if (!ST.portfolio.length) {
-    tbody.innerHTML = `<tr><td colspan="16" class="text-center text-muted py-4">
+    tbody.innerHTML = `<tr><td colspan="17" class="text-center text-muted py-4">
       保有銘柄がありません。毎平日16:35頃の自動更新、または銘柄データタブの「＋追加」で登録されます。
     </td></tr>`;
     return;
@@ -1596,6 +1659,7 @@ function renderPortfolio() {
       case 'code':     return row.p.code     || '';
       case 'name':     return row.s?.name    || '';
       case 'sector':   return row.s?.sector  || '';
+      case 'category': return CAT_SHORT[getCategory(row.p.code)] || '';
       case 'shares':   return row.sh;
       case 'acqPrice': return row.acq;
       case 'price':    return row.price;
@@ -1616,6 +1680,7 @@ function renderPortfolio() {
       case 'code':    return dir * a.p.code.localeCompare(b.p.code);
       case 'name':    return dir * (a.s?.name||'').localeCompare(b.s?.name||'');
       case 'sector':  return dir * (a.s?.sector||'').localeCompare(b.s?.sector||'');
+      case 'category':return dir * getCategory(a.p.code).localeCompare(getCategory(b.p.code));
       case 'shares':  return dir * (a.sh - b.sh);
       case 'acqPrice':return dir * (a.acq - b.acq);
       case 'price':   return dir * (a.price - b.price);
@@ -1636,6 +1701,12 @@ function renderPortfolio() {
       <td><code>${p.code}</code></td>
       <td>${s?.name||p.code}</td>
       <td><small class="text-muted">${s?.sector||'-'}</small></td>
+      <td>
+        <select class="form-select form-select-sm py-0" style="min-width:150px;font-size:.72rem"
+                onchange="updateCategory('${p.code}',this.value);renderPortfolio()">
+          ${catSelectHtml(p.code)}
+        </select>
+      </td>
       <td class="text-end">${fN(sh)}</td>
       <td class="text-end">${fN(acq,2)}</td>
       <td class="text-end">${price?fN(price):'-'}</td>
@@ -1851,6 +1922,7 @@ function exportAll() {
     portfolio: ST.portfolio,
     ranks:     ST.ranks,
     paused:    ST.paused,
+    categories: ST.categories,
   };
   const blob = new Blob([JSON.stringify(payload)], {type:'application/json'});
   const url  = URL.createObjectURL(blob);
@@ -1872,8 +1944,9 @@ function importAll(input) {
         if (!confirm(`銘柄${d.stocks?.length||0}件・ポートフォリオ${d.portfolio?.length||0}件・ランク${Object.keys(d.ranks||{}).length}件を読み込みます。`)) return;
         if (d.stocks?.length)    ST.stocks    = d.stocks;
         if (d.portfolio?.length) ST.portfolio = d.portfolio;
-        if (d.ranks)             ST.ranks     = {...ST.ranks, ...d.ranks};
-        if (d.paused)            ST.paused    = {...ST.paused, ...d.paused};
+        if (d.ranks)             ST.ranks      = {...ST.ranks, ...d.ranks};
+        if (d.paused)            ST.paused     = {...ST.paused, ...d.paused};
+        if (d.categories)        ST.categories = {...ST.categories, ...d.categories};
       } else {
         // 旧形式（ランクのみ）
         const count = Object.keys(d).length;
@@ -2100,6 +2173,7 @@ const SYNC = {
       portfolio: ST.portfolio,
       ranks:     ST.ranks,
       paused:    ST.paused,
+      categories: ST.categories,
       stocks,
     });
   },
@@ -2129,6 +2203,13 @@ const SYNC = {
         if (pj !== JSON.stringify(ST.paused)) {
           ST.paused = remote.paused; changed = true;
           localStorage.setItem('div_paused', pj);
+        }
+      }
+      if (remote.categories) {
+        const cj = JSON.stringify(remote.categories);
+        if (cj !== JSON.stringify(ST.categories)) {
+          ST.categories = remote.categories; changed = true;
+          localStorage.setItem('div_categories', cj);
         }
       }
 
