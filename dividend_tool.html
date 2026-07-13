@@ -1366,7 +1366,7 @@ function applySortClass(th, sort) {
 }
 
 // ── 業種別 評価進捗 ──────────────────────
-// 評価済み = ST.ranks に手動でランクが設定されている銘柄（自動除外×は含まない）
+// 評価済み = 手動ランク設定済み（ST.ranks） + 自動除外ルールで×が付いた銘柄
 let _secProgOpen = localStorage.getItem('div_secprog_open') !== '0';
 function toggleSectorProgress() {
   _secProgOpen = !_secProgOpen;
@@ -1387,7 +1387,8 @@ function renderSectorProgress() {
     const e = bySec[sec] ??= { total: 0, rated: 0 };
     e.total++;
     total++;
-    if (s.code in ST.ranks) { e.rated++; rated++; }
+    // 手動ランク設定済み、または自動除外×も「評価済み」として数える
+    if (s.code in ST.ranks || isAutoExcluded(s.code)) { e.rated++; rated++; }
   }
 
   const pctAll = total ? Math.round(rated / total * 100) : 0;
