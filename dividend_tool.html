@@ -200,6 +200,15 @@ th.has-filter .fd-icon { opacity:1; }
         <div id="yahooStatus" class="small mt-1 text-muted"></div>
       </div>
 
+      <!-- 業種別 評価進捗 -->
+      <div class="card p-3 mb-3">
+        <div class="d-flex align-items-center" style="cursor:pointer" onclick="toggleSectorProgress()">
+          <span class="fw-bold">📊 業種別 評価進捗</span>
+          <span class="text-muted small ms-2" id="sectorProgressSummary"></span>
+          <span class="ms-auto text-muted" id="sectorProgressToggle">▼</span>
+        </div>
+        <div id="sectorProgressBody" class="row g-2 mt-1"></div>
+      </div>
       <!-- フィルターバー -->
       <div class="card p-3 mb-3">
         <div class="row g-2 align-items-end">
@@ -1356,7 +1365,60 @@ function applySortClass(th, sort) {
   th.classList.add(sort.dir === -1 ? 'sort-desc' : 'sort-asc');
 }
 
+// ── 業種別 評価進捗 ──────────────────────
+// 評価済み = ST.ranks に手動でランクが設定されている銘柄（自動除外×は含まない）
+let _secProgOpen = localStorage.getItem('div_secprog_open') !== '0';
+function toggleSectorProgress() {
+  _secProgOpen = !_secProgOpen;
+  localStorage.setItem('div_secprog_open', _secProgOpen ? '1' : '0');
+  renderSectorProgress();
+}
+function renderSectorProgress() {
+  const body = document.getElementById('sectorProgressBody');
+  const sum  = document.getElementById('sectorProgressSummary');
+  const tgl  = document.getElementById('sectorProgressToggle');
+  if (!body) return;
+
+  const bySec = {};
+  let total = 0, rated = 0;
+  for (const s of ST.stocks) {
+    if (!/^\d{4}$/.test(s.code)) continue;   // 海外ETFは対象外
+    const sec = s.sector || '不明';
+    const e = bySec[sec] ??= { total: 0, rated: 0 };
+    e.total++;
+    total++;
+    if (s.code in ST.ranks) { e.rated++; rated++; }
+  }
+
+  const pctAll = total ? Math.round(rated / total * 100) : 0;
+  sum.textContent = `全体: ${rated.toLocaleString()} / ${total.toLocaleString()} 銘柄（${pctAll}%）`;
+  tgl.textContent = _secProgOpen ? '▲' : '▼';
+  if (!_secProgOpen) { body.innerHTML = ''; return; }
+
+  // 進捗の低い順 → 銘柄数の多い順
+  const items = Object.entries(bySec)
+    .map(([sec, e]) => ({ sec, ...e, pct: e.total ? e.rated / e.total * 100 : 0 }))
+    .sort((a, b) => (a.pct - b.pct) || (b.total - a.total));
+
+  body.innerHTML = items.map(it => {
+    const pct = Math.round(it.pct);
+    const bar = pct >= 100 ? 'bg-success' : pct >= 50 ? 'bg-info' : pct > 0 ? 'bg-warning' : 'bg-secondary';
+    return `<div class="col-6 col-md-4 col-lg-3" style="cursor:pointer"
+                 title="クリックでこの業種に絞り込み"
+                 onclick="document.getElementById('sSector').value='${it.sec}';renderStocks()">
+      <div class="d-flex justify-content-between small">
+        <span class="text-truncate me-1">${it.sec}</span>
+        <span class="text-nowrap ${pct===100?'text-success fw-bold':'text-muted'}">${it.rated}/${it.total}（${pct}%）</span>
+      </div>
+      <div class="progress" style="height:6px">
+        <div class="progress-bar ${bar}" style="width:${pct}%"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 function renderStocks() {
+  renderSectorProgress();
   const q          = document.getElementById('sSearch').value.toLowerCase();
   const sec        = document.getElementById('sSector').value;
   const mkt        = document.getElementById('sMarket').value;
