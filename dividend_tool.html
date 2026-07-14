@@ -1328,8 +1328,9 @@ function renderDash() {
         </tr>`;
       }).join('');
 
-  // 業種別サマリー
+  // 業種別サマリー（業種名の左に評価進捗の色ドットを表示）
   const targetW = labels.length ? 1/labels.length : 0;
+  const progStats = sectorProgressStats().bySec;
   document.getElementById('sectorSummaryBody').innerHTML = labels.length === 0
     ? '<tr><td colspan="6" class="text-muted text-center">ポートフォリオ未設定</td></tr>'
     : labels.sort((a,b)=>vals[b]-vals[a]).map(sec=>{
@@ -1337,12 +1338,20 @@ function renderDash() {
         const diff = w - targetW;
         const diffStr = (diff>=0?'+':'') + (diff*100).toFixed(1)+'%';
         const diffCls = diff>0.03?'text-danger':diff<-0.03?'text-success':'text-muted';
-        const portItems = ST.portfolio.filter(p=>(ST.stocks.find(s=>s.code===p.code)?.sector||'不明')===sec);
+        const portItems = ST.portfolio.filter(p=>(stockByCode(p.code)?.sector||'不明')===sec);
         const avgY = portItems.reduce((sum,p)=>{
-          return sum + getYield(ST.stocks.find(s=>s.code===p.code));
+          return sum + getYield(stockByCode(p.code));
         },0) / (portItems.length||1);
+        const pg  = progStats[sec];
+        const pct = pg ? Math.round(pg.rated / pg.total * 100) : null;
+        const dot = pct === null
+          ? ''
+          : `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${progColor(pct)};margin-right:5px"
+                   title="評価進捗 ${pg.rated}/${pg.total}（${pct}%）"></span>`;
+        const pctTxt = pct === null ? ''
+          : `<small class="${pct===100?'text-success fw-bold':'text-muted'} ms-1">${pct}%</small>`;
         return `<tr>
-          <td>${sec}</td><td>${portItems.length}</td>
+          <td>${dot}${sec}${pctTxt}</td><td>${portItems.length}</td>
           <td class="text-end">¥${fN(Math.round(vals[sec]))}</td>
           <td class="text-end">${(w*100).toFixed(1)}%</td>
           <td class="text-end text-success">${avgY.toFixed(2)}%</td>
@@ -1373,12 +1382,8 @@ function toggleSectorProgress() {
   localStorage.setItem('div_secprog_open', _secProgOpen ? '1' : '0');
   renderSectorProgress();
 }
-function renderSectorProgress() {
-  const body = document.getElementById('sectorProgressBody');
-  const sum  = document.getElementById('sectorProgressSummary');
-  const tgl  = document.getElementById('sectorProgressToggle');
-  if (!body) return;
-
+// 業種ごとの評価進捗を集計（ダッシュボードとも共用）
+function sectorProgressStats() {
   const bySec = {};
   let total = 0, rated = 0;
   for (const s of ST.stocks) {
@@ -1390,6 +1395,18 @@ function renderSectorProgress() {
     // 手動ランク設定済み、または自動除外×も「評価済み」として数える
     if (s.code in ST.ranks || isAutoExcluded(s.code)) { e.rated++; rated++; }
   }
+  return { bySec, total, rated };
+}
+// 進捗率 → 色（進捗パネルとダッシュボードで共通）
+const progColor = pct => pct >= 100 ? '#198754' : pct >= 50 ? '#0dcaf0' : pct > 0 ? '#ffc107' : '#adb5bd';
+
+function renderSectorProgress() {
+  const body = document.getElementById('sectorProgressBody');
+  const sum  = document.getElementById('sectorProgressSummary');
+  const tgl  = document.getElementById('sectorProgressToggle');
+  if (!body) return;
+
+  const { bySec, total, rated } = sectorProgressStats();
 
   const pctAll = total ? Math.round(rated / total * 100) : 0;
   sum.textContent = `全体: ${rated.toLocaleString()} / ${total.toLocaleString()} 銘柄（${pctAll}%）`;
