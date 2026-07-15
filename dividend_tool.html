@@ -283,6 +283,7 @@ th.has-filter .fd-icon { opacity:1; }
               <th class="sortable text-end" data-sort="stock" data-col="marketCap">時価総額</th>
               <th class="sortable text-end" data-sort="stock" data-col="sales">売上高</th>
               <th class="sortable text-center" data-sort="stock" data-col="rank">評価</th>
+              <th>メモ</th>
               <th>操作</th>
             </tr></thead>
             <tbody id="stockTbody"></tbody>
@@ -438,6 +439,7 @@ th.has-filter .fd-icon { opacity:1; }
               <th class="sortable text-end" data-sort="buy" data-col="annDiv">年間配当額</th>
               <th class="sortable" data-sort="buy" data-col="account">保有口座</th>
               <th class="sortable text-center" data-sort="buy" data-col="rank">評価</th>
+              <th>メモ</th>
               <th class="sortable text-end" data-sort="buy" data-col="yPt">利回Pt</th>
               <th class="sortable text-end" data-sort="buy" data-col="rPt">ランクPt</th>
               <th class="sortable text-end" data-sort="buy" data-col="dPt">分散Pt</th>
@@ -697,6 +699,8 @@ const ST = {
   paused: {},
   // 12分類の手動上書き {code: '1-1'等} （自動判定と異なる場合のみ格納）
   categories: {},
+  // 全銘柄メモ {code: text} （入力がある銘柄のみ格納。ポートフォリオのメモと同一ソース）
+  comments: {},
   save() {
     invalidateCaches();
     localStorage.setItem('div_stocks',    JSON.stringify(this.stocks));
@@ -704,6 +708,7 @@ const ST = {
     localStorage.setItem('div_ranks',     JSON.stringify(this.ranks));
     localStorage.setItem('div_paused',    JSON.stringify(this.paused));
     localStorage.setItem('div_categories',JSON.stringify(this.categories));
+    localStorage.setItem('div_comments',  JSON.stringify(this.comments));
     localStorage.setItem('div_updated_at', new Date().toISOString());
     // GitHub 自動プッシュ（連続編集は2.5秒デバウンスでまとめて送信）
     if (typeof SYNC !== 'undefined' && SYNC.canPush()) SYNC.schedulePush();
@@ -716,6 +721,8 @@ const ST = {
       const z = localStorage.getItem('div_paused');
       const c = localStorage.getItem('div_categories');
       if (c) this.categories = JSON.parse(c);
+      const m = localStorage.getItem('div_comments');
+      if (m) this.comments = JSON.parse(m);
       if (s) {
         this.stocks = JSON.parse(s);
         // 旧データの利回り100倍エラーを修正
@@ -730,6 +737,8 @@ const ST = {
         // マイグレーション: 旧形式の portfolio.rank を ST.ranks に移行
         this.portfolio.forEach(port => {
           if (port.rank && !this.ranks[port.code]) this.ranks[port.code] = port.rank;
+          // 旧 portfolio.comment を全銘柄メモ ST.comments に移行
+          if (port.comment && !(port.code in this.comments)) this.comments[port.code] = port.comment;
         });
       }
     } catch(e) {}
@@ -798,6 +807,20 @@ function catSelectHtml(code) {
     ids.map(id => `<option value="${id}" ${cur===id?'selected':''}>${CAT_SHORT[id]}</option>`).join('') +
     `</optgroup>`
   ).join('');
+}
+
+// ── 全銘柄メモ ──────────────────────────
+// ST.comments を単一ソースとし、銘柄データタブ・ポートフォリオタブで共用
+const escAttr = s => String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+function getComment(code) { return ST.comments[code] || ''; }
+function updateStockComment(code, v) {
+  v = (v || '').trim();
+  if (v) ST.comments[code] = v;
+  else delete ST.comments[code];
+  // ポートフォリオ側の旧フィールドにも反映（後方互換）
+  const pi = ST.portfolio.findIndex(p => p.code === code);
+  if (pi >= 0) ST.portfolio[pi].comment = v;
+  ST.save();
 }
 
 // 銘柄コード → 保有口座一覧（未保有なら空配列）
@@ -1508,13 +1531,18 @@ function renderStocks() {
             <option value="×" ${getStockRank(s.code)==='×'?'selected':''}>×</option>
           </select>
         </td>
+        <td>
+          <input type="text" class="form-control form-control-sm py-0" value="${escAttr(getComment(s.code))}"
+                 style="min-width:110px" placeholder="メモ"
+                 onchange="updateStockComment('${s.code}',this.value)">
+        </td>
         <td>${inPort
           ? '<span class="badge bg-success">保有中</span>'
           : `<button class="btn btn-outline-primary btn-sm py-0 px-2" onclick="openAdd('${s.code}')">＋追加</button>`
         }</td>
       </tr>`;
     }).join('') +
-    (list.length>LIMIT ? `<tr><td colspan="14" class="text-center text-muted small">他${list.length-LIMIT}件（検索で絞り込み）</td></tr>` : '');
+    (list.length>LIMIT ? `<tr><td colspan="15" class="text-center text-muted small">他${list.length-LIMIT}件（検索で絞り込み）</td></tr>` : '');
 }
 
 // ════════════════════════════════════════
@@ -1813,9 +1841,9 @@ function renderPortfolio() {
         </select>
       </td>
       <td>
-        <input type="text" class="form-control form-control-sm py-0" value="${p.comment||''}"
+        <input type="text" class="form-control form-control-sm py-0" value="${escAttr(getComment(p.code) || p.comment)}"
                style="min-width:100px" placeholder="メモ"
-               onchange="updateComment(${origIdx},this.value)">
+               onchange="updateStockComment('${p.code}',this.value)">
       </td>
       <td>
         <button class="btn btn-sm btn-outline-warning py-0 me-1" onclick="openEdit(${origIdx})">編集</button>
@@ -1900,7 +1928,7 @@ function renderBuy() {
 
   const tbody = document.getElementById('buyTbody');
   if (!filteredScored.length) {
-    tbody.innerHTML = `<tr><td colspan="18" class="text-center text-muted py-4">条件に合う銘柄がありません</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="19" class="text-center text-muted py-4">条件に合う銘柄がありません</td></tr>`;
     return;
   }
 
@@ -1937,6 +1965,11 @@ function renderBuy() {
       <td class="text-end">${annDivCell}</td>
       <td><small>${acctCell}</small></td>
       <td class="text-center">${selHtml}</td>
+      <td>
+        <input type="text" class="form-control form-control-sm py-0" value="${escAttr(getComment(s.code))}"
+               style="min-width:100px" placeholder="メモ"
+               onchange="updateStockComment('${s.code}',this.value)">
+      </td>
       <td class="text-end">${s.sc.yPt}</td>
       <td class="text-end">${s.sc.rPt}</td>
       <td class="text-end">${s.sc.dPt}</td>
@@ -1981,10 +2014,12 @@ function renderBuy() {
         <span>ランクPt: ${s.sc.rPt}</span>
         <span>分散Pt: ${s.sc.dPt}</span>
       </div>
-      <div class="d-flex align-items-center gap-2">
+      <div class="d-flex align-items-center gap-2 mb-2">
         <div class="buy-card-rank flex-grow-1">${selHtml}</div>
         <div>${flag}</div>
       </div>
+      <input type="text" class="form-control form-control-sm py-0" value="${escAttr(getComment(s.code))}"
+             placeholder="メモ" onchange="updateStockComment('${s.code}',this.value)">
     </div>`;
   }).join('');
 }
@@ -2003,6 +2038,7 @@ function exportAll() {
     ranks:     ST.ranks,
     paused:    ST.paused,
     categories: ST.categories,
+    comments:  ST.comments,
   };
   const blob = new Blob([JSON.stringify(payload)], {type:'application/json'});
   const url  = URL.createObjectURL(blob);
@@ -2027,6 +2063,7 @@ function importAll(input) {
         if (d.ranks)             ST.ranks      = {...ST.ranks, ...d.ranks};
         if (d.paused)            ST.paused     = {...ST.paused, ...d.paused};
         if (d.categories)        ST.categories = {...ST.categories, ...d.categories};
+        if (d.comments)          ST.comments   = {...ST.comments, ...d.comments};
       } else {
         // 旧形式（ランクのみ）
         const count = Object.keys(d).length;
@@ -2132,7 +2169,7 @@ function updateStockRank(code, v) {
   ST.save();
   renderStocks(); renderBuy();
 }
-function updateComment(i,v) { ST.portfolio[i].comment=v; ST.save(); }
+function updateComment(i,v) { updateStockComment(ST.portfolio[i].code, v); }
 
 function togglePaused(code, checked) {
   if (checked) ST.paused[code] = true;
@@ -2254,6 +2291,7 @@ const SYNC = {
       ranks:     ST.ranks,
       paused:    ST.paused,
       categories: ST.categories,
+      comments:  ST.comments,
       stocks,
     });
   },
@@ -2290,6 +2328,13 @@ const SYNC = {
         if (cj !== JSON.stringify(ST.categories)) {
           ST.categories = remote.categories; changed = true;
           localStorage.setItem('div_categories', cj);
+        }
+      }
+      if (remote.comments) {
+        const mj = JSON.stringify(remote.comments);
+        if (mj !== JSON.stringify(ST.comments)) {
+          ST.comments = remote.comments; changed = true;
+          localStorage.setItem('div_comments', mj);
         }
       }
 
