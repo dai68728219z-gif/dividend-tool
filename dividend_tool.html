@@ -18,6 +18,7 @@ body { background:#f0f2f5; font-family:'Yu Gothic UI',sans-serif; font-size:13px
               padding:2px 8px; border-radius:20px; font-weight:700; }
 .rank-badge { font-size:1.1em; font-weight:700; padding:1px 6px; border-radius:4px; }
 .rank-★ { background:#fff3cd; color:#b8860b; }
+.rank-◆ { background:#ffe0b2; color:#e65100; }
 .rank-● { background:#cce5ff; color:#004085; }
 .rank-優待 { background:#e8d5ff; color:#5b2c8d; }
 .rank-〇 { background:#d4edda; color:#155724; }
@@ -231,6 +232,7 @@ th.has-filter .fd-icon { opacity:1; }
             <select class="form-select form-select-sm" id="sRank" style="width:100px">
               <option value="">全て</option>
               <option value="★">★</option>
+              <option value="◆">◆</option>
               <option value="●">●</option>
               <option value="優待">優待</option>
               <option value="〇">〇</option>
@@ -341,8 +343,10 @@ th.has-filter .fd-icon { opacity:1; }
             <label class="form-label small mb-1">評価ランク</label>
             <select class="form-select form-select-sm" id="fRank" style="width:110px">
               <option value="">全て</option><option value="★">★のみ</option>
+              <option value="◆">◆のみ</option><option value="●">●のみ</option>
               <option value="優待">優待のみ</option>
-              <option value="★●">★●</option><option value="★●〇">★●〇</option>
+              <option value="★◆">★◆</option><option value="★◆●">★◆●</option>
+              <option value="★◆●〇">★◆●〇</option>
               <option value="unrated">未評価のみ</option>
             </select>
           </div>
@@ -390,7 +394,8 @@ th.has-filter .fd-icon { opacity:1; }
                 <div class="fw-bold mb-1">⭐ 評価ランクPt（最大40pt）</div>
                 <table class="table table-sm table-borderless mb-0" style="font-size:11px">
                   <tr><td><span class="rank-badge rank-★">★</span></td><td class="fw-bold text-success">40pt</td></tr>
-                  <tr><td><span class="rank-badge rank-●">●</span></td><td>25pt</td></tr>
+                  <tr><td><span class="rank-badge rank-◆">◆</span></td><td>25pt</td></tr>
+                  <tr><td><span class="rank-badge rank-●">●</span></td><td>10pt</td></tr>
                   <tr><td><span class="rank-badge rank-〇">〇</span></td><td class="text-muted">0pt</td></tr>
                   <tr><td><span class="rank-badge rank-優待">優待</span></td><td class="text-muted">0pt</td></tr>
                   <tr><td>未評価</td><td class="text-muted">0pt</td></tr>
@@ -485,6 +490,7 @@ th.has-filter .fd-icon { opacity:1; }
             <div class="form-check"><input class="form-check-input" type="radio" name="bulkRankR" id="bR×" value="×" checked><label class="form-check-label" for="bR×"><span class="rank-badge rank-×">×</span> 除外</label></div>
             <div class="form-check"><input class="form-check-input" type="radio" name="bulkRankR" id="bR〇" value="〇"><label class="form-check-label" for="bR〇"><span class="rank-badge rank-〇">〇</span></label></div>
             <div class="form-check"><input class="form-check-input" type="radio" name="bulkRankR" id="bR●" value="●"><label class="form-check-label" for="bR●"><span class="rank-badge rank-●">●</span></label></div>
+            <div class="form-check"><input class="form-check-input" type="radio" name="bulkRankR" id="bR◆" value="◆"><label class="form-check-label" for="bR◆"><span class="rank-badge rank-◆">◆</span></label></div>
             <div class="form-check"><input class="form-check-input" type="radio" name="bulkRankR" id="bR★" value="★"><label class="form-check-label" for="bR★"><span class="rank-badge rank-★">★</span></label></div>
           </div>
         </div>
@@ -594,7 +600,8 @@ th.has-filter .fd-icon { opacity:1; }
           <label class="form-label fw-bold">評価ランク</label>
           <div class="btn-group w-100">
             <input type="radio" class="btn-check" name="mRank" id="rStar"   value="★"><label class="btn btn-outline-warning" for="rStar">★ 最優先</label>
-            <input type="radio" class="btn-check" name="mRank" id="rBullet" value="●"><label class="btn btn-outline-primary" for="rBullet">● 優先</label>
+            <input type="radio" class="btn-check" name="mRank" id="rDiamond" value="◆"><label class="btn btn-outline-info" for="rDiamond">◆ 優先</label>
+            <input type="radio" class="btn-check" name="mRank" id="rBullet" value="●"><label class="btn btn-outline-primary" for="rBullet">● 次点</label>
             <input type="radio" class="btn-check" name="mRank" id="rUta"    value="優待"><label class="btn btn-outline-secondary" for="rUta">優待</label>
             <input type="radio" class="btn-check" name="mRank" id="rOpen"   value="〇"><label class="btn btn-outline-success" for="rOpen">〇 普通</label>
             <input type="radio" class="btn-check" name="mRank" id="rX"      value="×"><label class="btn btn-outline-danger"  for="rX">× 除外</label>
@@ -1129,8 +1136,8 @@ async function autoLoadPortfolio() {
 // ════════════════════════════════════════
 //  スコア計算
 // ════════════════════════════════════════
-const RANK_PT  = {'★':40,'●':25,'優待':0,'〇':0,'×':0};
-const RANK_CSS = {'★':'rank-★','●':'rank-●','優待':'rank-優待','〇':'rank-〇','×':'rank-×'};
+const RANK_PT  = {'★':40,'◆':25,'●':10,'優待':0,'〇':0,'×':0};
+const RANK_CSS = {'★':'rank-★','◆':'rank-◆','●':'rank-●','優待':'rank-優待','〇':'rank-〇','×':'rank-×'};
 // 自動除外条件チェック（営業利益率≤1% / 自己資本比率≤20% / 時価総額≤100億 or 未表示）
 function isAutoExcluded(code) {
   const s = stockByCode(code);
@@ -1492,7 +1499,7 @@ function renderStocks() {
   list = applyFilters(list, 'stock', (s, col) => col === 'rank' ? getStockRank(s.code) : (s[col] ?? ''));
   list = list.sort((a,b) => {
     if (stockSort.col === 'rank') {
-      const ro = {'★':0,'●':1,'優待':2,'〇':3,'×':4,'':5};
+      const ro = {'★':0,'◆':1,'●':2,'優待':3,'〇':4,'×':5,'':6};
       return stockSort.dir * ((ro[getStockRank(a.code)]??5) - (ro[getStockRank(b.code)]??5));
     }
     if (TEXT_COLS.has(stockSort.col)) {
@@ -1525,6 +1532,7 @@ function renderStocks() {
             onchange="updateStockRank('${s.code}',this.value)">
             <option value="" ${!getStockRank(s.code)?'selected':''}>-</option>
             <option value="★" ${getStockRank(s.code)==='★'?'selected':''}>★</option>
+            <option value="◆" ${getStockRank(s.code)==='◆'?'selected':''}>◆</option>
             <option value="●" ${getStockRank(s.code)==='●'?'selected':''}>●</option>
             <option value="優待" ${getStockRank(s.code)==='優待'?'selected':''}>優待</option>
             <option value="〇" ${getStockRank(s.code)==='〇'?'selected':''}>〇</option>
@@ -1735,7 +1743,7 @@ document.querySelectorAll('th.sortable').forEach(th => {
 // ════════════════════════════════════════
 //  RENDER: ポートフォリオ
 // ════════════════════════════════════════
-const RANK_ORDER = {'★':0,'●':1,'優待':2,'〇':3,'×':4,'':5};
+const RANK_ORDER = {'★':0,'◆':1,'●':2,'優待':3,'〇':4,'×':5,'':6};
 
 function renderPortfolio() {
   const tbody = document.getElementById('portTbody');
@@ -1834,6 +1842,7 @@ function renderPortfolio() {
                 onchange="updateRank(${origIdx},this.value)">
           <option value="" ${!getStockRank(p.code)?'selected':''}>-</option>
           <option value="★" ${getStockRank(p.code)==='★'?'selected':''}>★</option>
+          <option value="◆" ${getStockRank(p.code)==='◆'?'selected':''}>◆</option>
           <option value="●" ${getStockRank(p.code)==='●'?'selected':''}>●</option>
           <option value="優待" ${getStockRank(p.code)==='優待'?'selected':''}>優待</option>
           <option value="〇" ${getStockRank(p.code)==='〇'?'selected':''}>〇</option>
@@ -1879,10 +1888,13 @@ function renderBuy() {
       if (rankF) {
         const r = getStockRank(s.code);
         if (rankF==='unrated' && r!=='') return false;
-        if (rankF==='★'    && r!=='★') return false;
-        if (rankF==='優待'  && r!=='優待') return false;
-        if (rankF==='★●'   && !['★','●'].includes(r)) return false;
-        if (rankF==='★●〇' && !['★','●','優待','〇',''].includes(r)) return false;
+        if (rankF==='★'      && r!=='★') return false;
+        if (rankF==='◆'      && r!=='◆') return false;
+        if (rankF==='●'      && r!=='●') return false;
+        if (rankF==='優待'    && r!=='優待') return false;
+        if (rankF==='★◆'     && !['★','◆'].includes(r)) return false;
+        if (rankF==='★◆●'    && !['★','◆','●'].includes(r)) return false;
+        if (rankF==='★◆●〇' && !['★','◆','●','優待','〇',''].includes(r)) return false;
       }
       return true;
     });
@@ -1941,7 +1953,7 @@ function renderBuy() {
     const rankSel = (v) => `<option value="${v}" ${rank===v?'selected':''}>${v||'-'}</option>`;
     const selHtml = `<select class="form-select form-select-sm py-0 text-center" style="width:72px"
         onchange="updateStockRank('${s.code}',this.value)">
-        ${rankSel('')}${rankSel('★')}${rankSel('●')}${rankSel('優待')}${rankSel('〇')}${rankSel('×')}
+        ${rankSel('')}${rankSel('★')}${rankSel('◆')}${rankSel('●')}${rankSel('優待')}${rankSel('〇')}${rankSel('×')}
       </select>`;
     const annDivAmt = s.p && +s.dividendAmount > 0 && +s.p.shares > 0
       ? Math.round(+s.dividendAmount * +s.p.shares) : null;
