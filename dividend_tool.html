@@ -17,6 +17,10 @@ body { background:#f0f2f5; font-family:'Yu Gothic UI',sans-serif; font-size:13px
 .score-pill { display:inline-block; min-width:42px; text-align:center;
               padding:2px 8px; border-radius:20px; font-weight:700; }
 .rank-badge { font-size:1.1em; font-weight:700; padding:1px 6px; border-radius:4px; }
+.ext-links { display:flex; gap:4px; white-space:nowrap; }
+.ext-links a { display:inline-block; font-size:.68rem; font-weight:700; padding:1px 5px;
+               border-radius:3px; text-decoration:none; background:#eef1f5; color:#495057; }
+.ext-links a:hover { background:#dbe4ee; }
 .rank-★ { background:#fff3cd; color:#b8860b; }
 .rank-◆ { background:#ffe0b2; color:#e65100; }
 .rank-● { background:#cce5ff; color:#004085; }
@@ -274,6 +278,7 @@ th.has-filter .fd-icon { opacity:1; }
             <thead class="table-dark sticky-top-2"><tr>
               <th class="sortable" data-sort="stock" data-col="code">コード</th>
               <th class="sortable" data-sort="stock" data-col="name">銘柄名</th>
+              <th>情報</th>
               <th class="sortable" data-sort="stock" data-col="sector">業種</th>
               <th class="sortable" data-sort="stock" data-col="market">市場</th>
               <th class="sortable text-end" data-sort="stock" data-col="price">株価</th>
@@ -438,6 +443,7 @@ th.has-filter .fd-icon { opacity:1; }
               <th>#</th>
               <th class="sortable" data-sort="buy" data-col="code">コード</th>
               <th class="sortable" data-sort="buy" data-col="name">銘柄名</th>
+              <th>情報</th>
               <th class="sortable" data-sort="buy" data-col="sector">業種</th>
               <th class="sortable text-end" data-sort="buy" data-col="price">株価</th>
               <th class="sortable text-end" data-sort="buy" data-col="curY">現在利回り</th>
@@ -828,6 +834,20 @@ function updateStockComment(code, v) {
   const pi = ST.portfolio.findIndex(p => p.code === code);
   if (pi >= 0) ST.portfolio[pi].comment = v;
   ST.save();
+}
+
+// ── 外部サイトリンク（Yahoo!ファイナンス・IRBANK・バフェット・コード）──
+// 日本株4桁コードのみ対象（海外ETF等は非対応サイトのため非表示）
+function extLinksHtml(code) {
+  if (!/^\d{4}$/.test(String(code))) return '';
+  const y  = `https://finance.yahoo.co.jp/quote/${code}.T`;
+  const ir = `https://irbank.net/${code}`;
+  const bc = `https://www.buffett-code.com/company/${code}/`;
+  return `<div class="ext-links">
+    <a href="${y}"  target="_blank" rel="noopener" title="Yahoo!ファイナンス">Y!</a>
+    <a href="${ir}" target="_blank" rel="noopener" title="IRBANK">IR</a>
+    <a href="${bc}" target="_blank" rel="noopener" title="バフェット・コード">BC</a>
+  </div>`;
 }
 
 // 銘柄コード → 保有口座一覧（未保有なら空配列）
@@ -1517,6 +1537,7 @@ function renderStocks() {
       const inPort = ST.portfolio.some(p=>p.code===s.code);
       return `<tr>
         <td><code>${s.code}</code></td><td>${s.name||'-'}</td>
+        <td>${extLinksHtml(s.code)}</td>
         <td><small class="text-muted">${s.sector||'-'}</small></td>
         <td><small>${s.market||'-'}</small></td>
         <td class="text-end">${fN(s.price)}</td>
@@ -1550,7 +1571,7 @@ function renderStocks() {
         }</td>
       </tr>`;
     }).join('') +
-    (list.length>LIMIT ? `<tr><td colspan="15" class="text-center text-muted small">他${list.length-LIMIT}件（検索で絞り込み）</td></tr>` : '');
+    (list.length>LIMIT ? `<tr><td colspan="16" class="text-center text-muted small">他${list.length-LIMIT}件（検索で絞り込み）</td></tr>` : '');
 }
 
 // ════════════════════════════════════════
@@ -1940,7 +1961,7 @@ function renderBuy() {
 
   const tbody = document.getElementById('buyTbody');
   if (!filteredScored.length) {
-    tbody.innerHTML = `<tr><td colspan="19" class="text-center text-muted py-4">条件に合う銘柄がありません</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="20" class="text-center text-muted py-4">条件に合う銘柄がありません</td></tr>`;
     return;
   }
 
@@ -1971,6 +1992,7 @@ function renderBuy() {
     const {col,flag,selHtml,annDivCell,acctCell} = rowHtml(s,i);
     return `<tr class="${i<3?'table-warning':''}">
       <td>${i+1}</td><td><code>${s.code}</code></td><td>${s.name||'-'}</td>
+      <td>${extLinksHtml(s.code)}</td>
       <td><small class="text-muted">${s.sector||'-'}</small></td>
       <td class="text-end">${fN(s.price)}</td>
       <td class="text-end fw-bold text-success">${fY(getYield(s))}</td>
@@ -2015,6 +2037,7 @@ function renderBuy() {
         <div class="buy-card-score" style="color:${col}">${s.sc.total}</div>
       </div>
       <div class="text-muted small mb-2">${s.sector||'-'}</div>
+      <div class="mb-2">${extLinksHtml(s.code)}</div>
       ${acctLine}
       <div class="d-flex gap-3 mb-2 small">
         <span>株価 <strong>${fN(s.price)}</strong></span>
