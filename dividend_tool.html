@@ -725,7 +725,10 @@ const ST = {
     localStorage.setItem('div_comments',  JSON.stringify(this.comments));
     localStorage.setItem('div_updated_at', new Date().toISOString());
     // GitHub 自動プッシュ（連続編集は2.5秒デバウンスでまとめて送信）
-    if (typeof SYNC !== 'undefined' && SYNC.canPush()) SYNC.schedulePush();
+    if (typeof SYNC !== 'undefined' && SYNC.canPush()) {
+      SYNC._markDirty();   // 送信が確認できるまでpull()による上書きを防ぐ
+      SYNC.schedulePush();
+    }
   },
   load() {
     try {
@@ -2293,6 +2296,18 @@ const SYNC = {
   token: localStorage.getItem('div_sync_token') || '',
   _busy: false,
   _pushTimer: null,
+  // dirty = ローカル編集がGitHubへの送信でまだ確認できていない状態。
+  // trueの間はpull()がランク等をGitHub側で上書きしないようにして、
+  // 「変更直後にタブを離れて戻ると元に戻る」事故を防ぐ。
+  _dirty: localStorage.getItem('div_dirty') === '1',
+  _markDirty() {
+    this._dirty = true;
+    localStorage.setItem('div_dirty', '1');
+  },
+  _clearDirty() {
+    this._dirty = false;
+    localStorage.removeItem('div_dirty');
+  },
 
   // 自動プッシュ用: 連続編集を1回の送信にまとめる（最後の変更が必ず送られる）
   schedulePush(delay = 2500) {
@@ -2354,32 +2369,41 @@ const SYNC = {
       // ── ランク・保留はマルチデバイス編集対象のため、時刻に関係なく常にGitHub側を正とする ──
       // （PCは自動読み込みで毎回保存するためローカル時刻が常に新しくなり、
       //   時刻比較だとスマホの変更を永久に取り込めない）
-      if (remote.ranks && Object.keys(remote.ranks).length) {
-        const rj = JSON.stringify(remote.ranks);
-        if (rj !== JSON.stringify(ST.ranks)) {
-          ST.ranks = remote.ranks; changed = true;
-          localStorage.setItem('div_ranks', rj);
+      //
+      // ただし、ローカルに送信未確認の変更（_dirty）がある間は絶対に上書きしない。
+      // 変更直後にタブを離れて戻った際、送信がまだ完了/失敗している状態でpullすると
+      // 変更前のGitHub側データで上書きしてしまい「ランクが元に戻る」事故になるため。
+      // dirty中はここではなく再送信を試みる。
+      if (this._dirty) {
+        if (this.canPush() && !this._busy) this.push().catch(() => {});
+      } else {
+        if (remote.ranks && Object.keys(remote.ranks).length) {
+          const rj = JSON.stringify(remote.ranks);
+          if (rj !== JSON.stringify(ST.ranks)) {
+            ST.ranks = remote.ranks; changed = true;
+            localStorage.setItem('div_ranks', rj);
+          }
         }
-      }
-      if (remote.paused) {
-        const pj = JSON.stringify(remote.paused);
-        if (pj !== JSON.stringify(ST.paused)) {
-          ST.paused = remote.paused; changed = true;
-          localStorage.setItem('div_paused', pj);
+        if (remote.paused) {
+          const pj = JSON.stringify(remote.paused);
+          if (pj !== JSON.stringify(ST.paused)) {
+            ST.paused = remote.paused; changed = true;
+            localStorage.setItem('div_paused', pj);
+          }
         }
-      }
-      if (remote.categories) {
-        const cj = JSON.stringify(remote.categories);
-        if (cj !== JSON.stringify(ST.categories)) {
-          ST.categories = remote.categories; changed = true;
-          localStorage.setItem('div_categories', cj);
+        if (remote.categories) {
+          const cj = JSON.stringify(remote.categories);
+          if (cj !== JSON.stringify(ST.categories)) {
+            ST.categories = remote.categories; changed = true;
+            localStorage.setItem('div_categories', cj);
+          }
         }
-      }
-      if (remote.comments) {
-        const mj = JSON.stringify(remote.comments);
-        if (mj !== JSON.stringify(ST.comments)) {
-          ST.comments = remote.comments; changed = true;
-          localStorage.setItem('div_comments', mj);
+        if (remote.comments) {
+          const mj = JSON.stringify(remote.comments);
+          if (mj !== JSON.stringify(ST.comments)) {
+            ST.comments = remote.comments; changed = true;
+            localStorage.setItem('div_comments', mj);
+          }
         }
       }
 
@@ -2445,6 +2469,7 @@ const SYNC = {
         throw new Error(`HTTP ${res.status}: ${j.message || '不明なエラー'}`);
       }
       this._clearError();
+      this._clearDirty();   // 送信確認できたのでpull()での上書きを解禁
       syncIndicator('ok');
       return true;
     } catch(e) {
@@ -2604,7 +2629,8 @@ async function diagSync() {
       `  ランク数: ${Object.keys(ST.ranks).length}\n` +
       `  保留数:   ${Object.keys(ST.paused).length}\n` +
       `  自動除外: ${autoExcluded}銘柄\n` +
-      `  スコア>0: ${scored}銘柄` +
+      `  スコア>0: ${scored}銘柄\n` +
+      `  送信状況: ${SYNC._dirty ? '⚠ 未確認の変更あり（再送信を試みています）' : '✅ 送信済み'}` +
       errNote;
   } catch(e) {
     el.textContent = 'エラー: ' + e.message;
@@ -2663,16 +2689,19 @@ function showToast(msg, type='info') {
   setTimeout(() => t.remove(), 3000);
 }
 
-// タブを閉じる/バックグラウンドに回した時、送信待ちがあれば即送信
-// タブに戻ってきた時は最新データを取得（開きっぱなしのPC対策）
+// タブを閉じる/バックグラウンドに回した時、未送信の変更（dirty）があれば即送信
+// タブに戻ってきた時: 送信がまだ未確認(dirty)なら再送信を優先し、pullで上書きしないようにする。
+// dirtyでなければ最新データを取得（開きっぱなしのPC対策）
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden' && SYNC._pushTimer) {
+  if (document.visibilityState === 'hidden') {
     clearTimeout(SYNC._pushTimer);
     SYNC._pushTimer = null;
-    SYNC.push().catch(() => {});
+    if (SYNC._dirty && SYNC.canPush() && !SYNC._busy) SYNC.push().catch(() => {});
   } else if (document.visibilityState === 'visible') {
-    // 送信待ちの自分の変更がある時はpullしない（上書き防止）
-    if (!SYNC._pushTimer && !SYNC._busy) {
+    if (SYNC._dirty && SYNC.canPush() && !SYNC._busy) {
+      // 離脱時の送信が未確認 → pullではなく再送信を試みる（上書き事故防止）
+      SYNC.push().catch(() => {});
+    } else if (!SYNC._pushTimer && !SYNC._busy) {
       SYNC.pull().then(r => { if (r === 'updated') renderAll(); }).catch(() => {});
     }
   }
@@ -2698,6 +2727,11 @@ if (ST.stocks.length) {
 //   さらに他端末の変更（保留・ランク）を上書き送信してしまうため。
 renderAll();
 (async () => {
+  // 前回セッションで送信未確認(dirty)のまま終了していた場合、まず再送信を試みる。
+  // そうしないと、この後のpull()が古いGitHubデータでランク等を上書きしてしまう。
+  if (SYNC._dirty && SYNC.canPush()) {
+    await SYNC.push().catch(() => {});
+  }
   const result = await SYNC.pull().catch(() => null);
   if (result === 'updated') {
     renderAll();
