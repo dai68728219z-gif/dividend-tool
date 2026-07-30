@@ -312,6 +312,7 @@ th.has-filter .fd-icon { opacity:1; }
               <th class="sortable" data-sort="port" data-col="account">口座</th>
               <th class="sortable" data-sort="port" data-col="code">コード</th>
               <th class="sortable" data-sort="port" data-col="name">銘柄名</th>
+              <th>情報</th>
               <th class="sortable" data-sort="port" data-col="sector">業種</th>
               <th class="sortable" data-sort="port" data-col="category">分類</th>
               <th class="sortable text-end" data-sort="port" data-col="shares">保有株数</th>
@@ -1769,7 +1770,7 @@ const RANK_ORDER = {'★':0,'◆':1,'●':2,'優待':3,'〇':4,'×':5,'':6};
 function renderPortfolio() {
   const tbody = document.getElementById('portTbody');
   if (!ST.portfolio.length) {
-    tbody.innerHTML = `<tr><td colspan="17" class="text-center text-muted py-4">
+    tbody.innerHTML = `<tr><td colspan="18" class="text-center text-muted py-4">
       保有銘柄がありません。毎平日16:35頃の自動更新、または銘柄データタブの「＋追加」で登録されます。
     </td></tr>`;
     return;
@@ -1837,6 +1838,7 @@ function renderPortfolio() {
       <td>${acctBadge(p.account)||'<span class="text-muted">-</span>'}</td>
       <td><code>${p.code}</code></td>
       <td>${s?.name||p.code}</td>
+      <td>${extLinksHtml(p.code)}</td>
       <td><small class="text-muted">${s?.sector||'-'}</small></td>
       <td>
         <select class="form-select form-select-sm py-0" style="min-width:150px;font-size:.72rem"
