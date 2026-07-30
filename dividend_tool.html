@@ -2303,6 +2303,14 @@ const SYNC = {
   isReady() { return true; },         // pull は常に可能
   canPush()  { return !!this.token; }, // push はトークンが必要
 
+  // 直近の同期エラーを記録（診断パネルで確認できるように）
+  _recordError(where, msg) {
+    localStorage.setItem('div_last_sync_error', JSON.stringify({
+      where, msg, at: new Date().toISOString(),
+    }));
+  },
+  _clearError() { localStorage.removeItem('div_last_sync_error'); },
+
   _headers() {
     return {
       'Authorization': `Bearer ${this.token}`,
@@ -2391,12 +2399,22 @@ const SYNC = {
         }
       }
       if (changed || dataChanged) invalidateCaches();
+      this._clearError();
       syncIndicator(this.canPush() ? 'ok' : 'readonly');
       return (changed || dataChanged) ? 'updated' : 'same';
     } catch(e) {
+      this._recordError('pull', e.message);
       syncIndicator('error', e.message);
       return null;
     }
+  },
+
+  // GitHub Contents API へPUT（sha省略可＝新規作成、指定時は上書き）
+  async _putOnce(sha) {
+    const content = btoa(unescape(encodeURIComponent(this._data())));
+    const body = { message: `sync: ${new Date().toISOString()}`, content };
+    if (sha) body.sha = sha;
+    return fetch(this._apiUrl(), { method:'PUT', headers:this._headers(), body:JSON.stringify(body) });
   },
 
   async push() {
@@ -2410,23 +2428,27 @@ const SYNC = {
       const infoRes = await fetch(this._apiUrl(), { headers: this._headers() });
       if (infoRes.ok) sha = (await infoRes.json()).sha;
 
-      // JSONをbase64エンコード
-      const content = btoa(unescape(encodeURIComponent(this._data())));
-      const body = { message: `sync: ${new Date().toISOString()}`, content };
-      if (sha) body.sha = sha;
+      let res = await this._putOnce(sha);
 
-      const res = await fetch(this._apiUrl(), {
-        method:  'PUT',
-        headers: this._headers(),
-        body:    JSON.stringify(body),
-      });
+      // 409/422 = 他端末やバッチが同時に書き込んでshaが古くなった競合。
+      // 最新shaを取り直して1回だけ再試行する（データは常に最新のST内容を再送するので上書きで問題ない）。
+      if (!res.ok && (res.status === 409 || res.status === 422)) {
+        const retryInfo = await fetch(this._apiUrl(), { headers: this._headers() });
+        const freshSha = retryInfo.ok ? (await retryInfo.json()).sha : null;
+        if (freshSha && freshSha !== sha) {
+          res = await this._putOnce(freshSha);
+        }
+      }
+
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        throw new Error(j.message || `HTTP ${res.status}`);
+        throw new Error(`HTTP ${res.status}: ${j.message || '不明なエラー'}`);
       }
+      this._clearError();
       syncIndicator('ok');
       return true;
     } catch(e) {
+      this._recordError('push', e.message);
       syncIndicator('error', e.message);
       throw e;  // 呼び出し元でエラー内容を取得できるよう再スロー
     } finally {
@@ -2551,17 +2573,39 @@ async function diagSync() {
     const localTs     = localStorage.getItem('div_updated_at') || '(なし)';
     const autoExcluded = ST.stocks.filter(s => isAutoExcluded(s.code)).length;
     const scored = ST.stocks.filter(s => { const sc = calcScore(s.code); return sc && sc.total > 0; }).length;
+
+    const localAheadMs = localTs && remote.updatedAt
+      ? new Date(localTs) - new Date(remote.updatedAt) : null;
+    const aheadNote = localAheadMs !== null
+      ? (localAheadMs > 60000
+          ? `\n  ⚠ ローカルがGitHubより${Math.round(localAheadMs/60000)}分先行 → 直近の送信が未完了の可能性`
+          : '')
+      : '';
+
+    let errNote = '';
+    const rawErr = localStorage.getItem('div_last_sync_error');
+    if (rawErr) {
+      try {
+        const err = JSON.parse(rawErr);
+        errNote = `\n\n【直近の同期エラー】\n  発生: ${err.at}\n  種別: ${err.where === 'push' ? '送信' : '取得'}\n  内容: ${err.msg}`;
+      } catch(_) {}
+    }
+
     el.textContent =
       `【GitHub data.json】\n` +
       `  更新日時: ${remote.updatedAt || '不明'}\n` +
       `  銘柄数:   ${(remote.stocks||[]).length}\n` +
       `  PF数:     ${(remote.portfolio||[]).length}\n` +
-      `  ランク数: ${Object.keys(remote.ranks||{}).length}\n\n` +
+      `  ランク数: ${Object.keys(remote.ranks||{}).length}\n` +
+      `  保留数:   ${Object.keys(remote.paused||{}).length}\n\n` +
       `【ローカル】\n` +
-      `  更新日時: ${localTs}\n` +
+      `  更新日時: ${localTs}${aheadNote}\n` +
       `  銘柄数:   ${ST.stocks.length}\n` +
+      `  ランク数: ${Object.keys(ST.ranks).length}\n` +
+      `  保留数:   ${Object.keys(ST.paused).length}\n` +
       `  自動除外: ${autoExcluded}銘柄\n` +
-      `  スコア>0: ${scored}銘柄`;
+      `  スコア>0: ${scored}銘柄` +
+      errNote;
   } catch(e) {
     el.textContent = 'エラー: ' + e.message;
   }
