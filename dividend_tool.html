@@ -904,12 +904,15 @@ async function deepCheckStock(code, btn) {
     }
 
     const fmt = v => v == null ? '取得なし' : v;
+    const debugNote = (data.debug && data.debug.length)
+      ? `\n\n※一部未取得：\n${data.debug.join('\n')}` : '';
     const msg =
       `${s.name}（${code}）の最新情報（Yahoo!ファイナンス ${data.fetchedAt || ''}時点）\n\n` +
       `株価　　　　${fmt(oldPrice)}円 → ${fmt(newPrice)}円\n` +
       `1株配当　　${fmt(oldDiv)}円 → ${fmt(newDiv)}円\n` +
-      `配当利回り　${fmt(oldYld)}% → ${fmt(newYld)}%\n\n` +
-      `この内容で上書き保存しますか？`;
+      `配当利回り　${fmt(oldYld)}% → ${fmt(newYld)}%` +
+      debugNote +
+      `\n\nこの内容で上書き保存しますか？`;
 
     if (!confirm(msg)) return;
 
