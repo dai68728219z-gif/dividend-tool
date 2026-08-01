@@ -92,7 +92,11 @@ th.has-filter .fd-icon { opacity:1; }
     <span class="navbar-brand text-white fw-bold fs-5">📈 配当投資 意思決定ツール</span>
     <div class="d-flex gap-2 align-items-center ms-auto">
       <span class="text-white-50 small d-none d-md-inline" id="lastUpdated"></span>
-      <button id="syncBtn" class="btn btn-outline-secondary btn-sm" onclick="openSyncModal()" title="PC↔スマホ 自動同期">
+      <button id="btnSaveRanks" class="btn btn-outline-light btn-sm fw-bold" onclick="saveRanksNow()"
+              title="ランク・保留・分類・メモの変更をGitHubへ保存（PC・スマホ間で共有されます）">
+        💾 保存
+      </button>
+      <button id="syncBtn" class="btn btn-outline-secondary btn-sm" onclick="openSyncModal()" title="PC↔スマホ 自動同期の設定・診断">
         ☁️ <span id="syncStatus"></span>
       </button>
       <button class="btn btn-outline-light btn-sm" onclick="exportAll()" title="全データをJSONで保存">💾 データ保存</button>
@@ -724,10 +728,10 @@ const ST = {
     localStorage.setItem('div_categories',JSON.stringify(this.categories));
     localStorage.setItem('div_comments',  JSON.stringify(this.comments));
     localStorage.setItem('div_updated_at', new Date().toISOString());
-    // GitHub 自動プッシュ（連続編集は2.5秒デバウンスでまとめて送信）
+    // GitHubへの送信は自動では行わない（意図しないタイミングでの送信・競合を避けるため）。
+    // 「保存」ボタンを押した時にのみ SYNC.push() が呼ばれる。ここでは未保存フラグを立てるだけ。
     if (typeof SYNC !== 'undefined' && SYNC.canPush()) {
-      SYNC._markDirty();   // 送信が確認できるまでpull()による上書きを防ぐ
-      SYNC.schedulePush();
+      SYNC._markDirty();
     }
   },
   load() {
@@ -2295,24 +2299,19 @@ const SYNC = {
 
   token: localStorage.getItem('div_sync_token') || '',
   _busy: false,
-  _pushTimer: null,
-  // dirty = ローカル編集がGitHubへの送信でまだ確認できていない状態。
-  // trueの間はpull()がランク等をGitHub側で上書きしないようにして、
-  // 「変更直後にタブを離れて戻ると元に戻る」事故を防ぐ。
+  // dirty = 「保存」ボタンでまだGitHubへ送信していないローカル編集がある状態。
+  // trueの間はpull()がランク等をGitHub側で上書きしないようにする（未保存の変更を消さないため）。
+  // 自動送信は行わない方針のため、送信は必ずユーザーが保存ボタンを押した時にのみ発生する。
   _dirty: localStorage.getItem('div_dirty') === '1',
   _markDirty() {
     this._dirty = true;
     localStorage.setItem('div_dirty', '1');
+    updateSaveButtonUI();
   },
   _clearDirty() {
     this._dirty = false;
     localStorage.removeItem('div_dirty');
-  },
-
-  // 自動プッシュ用: 連続編集を1回の送信にまとめる（最後の変更が必ず送られる）
-  schedulePush(delay = 2500) {
-    clearTimeout(this._pushTimer);
-    this._pushTimer = setTimeout(() => { this._pushTimer = null; this.push().catch(() => {}); }, delay);
+    updateSaveButtonUI();
   },
 
   isReady() { return true; },         // pull は常に可能
@@ -2370,13 +2369,10 @@ const SYNC = {
       // （PCは自動読み込みで毎回保存するためローカル時刻が常に新しくなり、
       //   時刻比較だとスマホの変更を永久に取り込めない）
       //
-      // ただし、ローカルに送信未確認の変更（_dirty）がある間は絶対に上書きしない。
-      // 変更直後にタブを離れて戻った際、送信がまだ完了/失敗している状態でpullすると
-      // 変更前のGitHub側データで上書きしてしまい「ランクが元に戻る」事故になるため。
-      // dirty中はここではなく再送信を試みる。
-      if (this._dirty) {
-        if (this.canPush() && !this._busy) this.push().catch(() => {});
-      } else {
+      // ただし、「保存」ボタンでまだ送信していないローカル編集（_dirty）がある間は絶対に上書きしない。
+      // 自動送信は行わないため、dirty中はここでは何もせず、ユーザーが保存ボタンを押すまで
+      // ローカルの変更をそのまま保持する。
+      if (!this._dirty) {
         if (remote.ranks && Object.keys(remote.ranks).length) {
           const rj = JSON.stringify(remote.ranks);
           if (rj !== JSON.stringify(ST.ranks)) {
@@ -2443,8 +2439,9 @@ const SYNC = {
 
   async push() {
     if (!this.canPush()) return false;
-    if (this._busy) { this.schedulePush(1500); return false; }  // 送信中なら後で再送
+    if (this._busy) return false;  // 二重送信防止（保存ボタン側で連打を防いでいるが念のため）
     this._busy = true;
+    updateSaveButtonUI();
     syncIndicator('loading');
     try {
       // 現在のファイルSHAを取得（更新に必要）
@@ -2478,6 +2475,7 @@ const SYNC = {
       throw e;  // 呼び出し元でエラー内容を取得できるよう再スロー
     } finally {
       this._busy = false;
+      updateSaveButtonUI();
     }
   },
 
@@ -2644,13 +2642,49 @@ async function manualPull() {
   else showToast('取得に失敗しました', 'danger');
 }
 
+// ── 保存ボタン（ナビバー常設）: ランク・保留・分類・メモをGitHubへ手動送信 ──
+// 自動送信は行わない設計のため、これが唯一の送信トリガー。
+function updateSaveButtonUI() {
+  const btn = document.getElementById('btnSaveRanks');
+  if (!btn) return;
+  if (!SYNC.canPush()) {
+    btn.className = 'btn btn-outline-light btn-sm fw-bold';
+    btn.disabled = false;
+    btn.innerHTML = '💾 保存（未設定）';
+  } else if (SYNC._busy) {
+    btn.className = 'btn btn-outline-light btn-sm fw-bold';
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 保存中...';
+  } else if (SYNC._dirty) {
+    btn.className = 'btn btn-warning btn-sm fw-bold text-dark';
+    btn.disabled = false;
+    btn.innerHTML = '💾 保存（未保存の変更あり）';
+  } else {
+    btn.className = 'btn btn-outline-light btn-sm';
+    btn.disabled = false;
+    btn.innerHTML = '💾 保存';
+  }
+}
+
+async function saveRanksNow() {
+  if (!SYNC.canPush()) { openSyncModal(); return; }   // トークン未設定 → 設定を促す
+  if (SYNC._busy) return;                              // 二重クリック防止
+  try {
+    const ok = await SYNC.push();
+    if (ok === false) {
+      showToast('保存できませんでした（再度お試しください）', 'warning');
+    } else {
+      const rankCount = Object.keys(ST.ranks).length;
+      showToast(`保存しました（ランク数: ${rankCount}件）`, 'success');
+    }
+  } catch(e) {
+    showToast(`保存失敗: ${e.message}`, 'danger');
+  }
+}
+
 async function manualPush() {
   if (!SYNC.canPush()) { showToast('トークンが設定されていません', 'warning'); return; }
-  clearTimeout(SYNC._pushTimer);  // 予約中の自動送信は今すぐ送るので不要
-  // _busy の場合は少し待ってリトライ
-  if (SYNC._busy) {
-    await new Promise(r => setTimeout(r, 1500));
-  }
+  if (SYNC._busy) { showToast('送信中です。しばらくお待ちください', 'info'); return; }
   try {
     const ok = await SYNC.push();
     if (ok === false) {
@@ -2689,21 +2723,13 @@ function showToast(msg, type='info') {
   setTimeout(() => t.remove(), 3000);
 }
 
-// タブを閉じる/バックグラウンドに回した時、未送信の変更（dirty）があれば即送信
-// タブに戻ってきた時: 送信がまだ未確認(dirty)なら再送信を優先し、pullで上書きしないようにする。
-// dirtyでなければ最新データを取得（開きっぱなしのPC対策）
+// タブに戻ってきた時、未保存の変更（dirty）がなければ最新データを取得する
+// （開きっぱなしのPCで他端末の保存内容を拾うため）。
+// 未保存の変更がある間は絶対にpullしない＝自動送信も自動破棄もしない。
+// 送信は必ず「保存」ボタンを押した時にのみ行う。
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') {
-    clearTimeout(SYNC._pushTimer);
-    SYNC._pushTimer = null;
-    if (SYNC._dirty && SYNC.canPush() && !SYNC._busy) SYNC.push().catch(() => {});
-  } else if (document.visibilityState === 'visible') {
-    if (SYNC._dirty && SYNC.canPush() && !SYNC._busy) {
-      // 離脱時の送信が未確認 → pullではなく再送信を試みる（上書き事故防止）
-      SYNC.push().catch(() => {});
-    } else if (!SYNC._pushTimer && !SYNC._busy) {
-      SYNC.pull().then(r => { if (r === 'updated') renderAll(); }).catch(() => {});
-    }
+  if (document.visibilityState === 'visible' && !SYNC._dirty && !SYNC._busy) {
+    SYNC.pull().then(r => { if (r === 'updated') renderAll(); }).catch(() => {});
   }
 });
 
@@ -2726,12 +2752,12 @@ if (ST.stocks.length) {
 //   ローカルが「最新」扱いになってpullがスキップされ、
 //   さらに他端末の変更（保留・ランク）を上書き送信してしまうため。
 renderAll();
+updateSaveButtonUI();
+if (SYNC._dirty && SYNC.canPush()) {
+  // 前回、保存ボタンを押さずに終了した変更が残っている
+  showToast('前回の未保存の変更があります。「💾 保存」ボタンで送信してください', 'warning');
+}
 (async () => {
-  // 前回セッションで送信未確認(dirty)のまま終了していた場合、まず再送信を試みる。
-  // そうしないと、この後のpull()が古いGitHubデータでランク等を上書きしてしまう。
-  if (SYNC._dirty && SYNC.canPush()) {
-    await SYNC.push().catch(() => {});
-  }
   const result = await SYNC.pull().catch(() => null);
   if (result === 'updated') {
     renderAll();
