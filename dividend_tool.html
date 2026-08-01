@@ -21,6 +21,11 @@ body { background:#f0f2f5; font-family:'Yu Gothic UI',sans-serif; font-size:13px
 .ext-links a { display:inline-block; font-size:.68rem; font-weight:700; padding:1px 5px;
                border-radius:3px; text-decoration:none; background:#eef1f5; color:#495057; }
 .ext-links a:hover { background:#dbe4ee; }
+.ext-links button.dc-btn { display:inline-block; font-size:.68rem; font-weight:700; padding:1px 5px;
+               border-radius:3px; border:none; background:#eef1f5; color:#495057; cursor:pointer; }
+.ext-links button.dc-btn:hover { background:#dbe4ee; }
+.ext-links button.dc-btn.dc-verified { background:#d4edda; color:#155724; }
+.ext-links button.dc-btn:disabled { opacity:.55; cursor:wait; }
 .rank-★ { background:#fff3cd; color:#b8860b; }
 .rank-◆ { background:#ffe0b2; color:#e65100; }
 .rank-● { background:#cce5ff; color:#004085; }
@@ -851,11 +856,81 @@ function extLinksHtml(code) {
   const y  = `https://finance.yahoo.co.jp/quote/${code}.T`;
   const ir = `https://irbank.net/${code}`;
   const bc = `https://www.buffett-code.com/company/${code}/`;
+  const s        = stockByCode(code);
+  const verified = s?.verifiedAt;
+  const vLabel   = verified ? new Date(verified).toLocaleDateString('ja-JP', {month:'numeric', day:'numeric'}) : '';
+  const dcTitle  = verified
+    ? `最終ディープ調査: ${new Date(verified).toLocaleString('ja-JP')}（クリックで再調査・上書き）`
+    : 'ディープ調査：Yahoo!ファイナンスで株価・配当を確認し上書き保存（PC版のみ）';
   return `<div class="ext-links">
     <a href="${y}"  target="_blank" rel="noopener" title="Yahoo!ファイナンス">Y!</a>
     <a href="${ir}" target="_blank" rel="noopener" title="IRBANK">IR</a>
     <a href="${bc}" target="_blank" rel="noopener" title="バフェット・コード">BC</a>
+    <button type="button" class="dc-btn${verified ? ' dc-verified' : ''}"
+            onclick="deepCheckStock('${code}', this)" title="${escAttr(dcTitle)}">🔍${vLabel}</button>
   </div>`;
+}
+
+// ── ディープ調査（個別銘柄の株価・配当をYahoo!ファイナンスで確認し上書き保存）──
+// PC版（start_tool.py 経由 / IS_LOCAL）でのみ動作。
+// スマホ版はブラウザのCORS制限でYahoo!ファイナンスへ直接アクセスできないため非対応。
+async function deepCheckStock(code, btn) {
+  if (!IS_LOCAL) {
+    showToast('この機能はPC版（start_tool.py 起動時）でのみ利用できます', 'warning');
+    return;
+  }
+  const s = stockByCode(code);
+  if (!s) { showToast('銘柄データが見つかりません', 'warning'); return; }
+
+  const origHtml = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳'; }
+
+  try {
+    const res  = await fetch(`/api/deep-check?code=${code}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+    const oldPrice = s.price ?? null;
+    const oldDiv   = s.dividendAmount ?? null;
+    const oldYld   = getYield(s) || null;
+
+    const newPrice = data.price ?? null;
+    const newDiv   = data.dividendAmount ?? null;
+    const newYld   = (newPrice && newDiv) ? Math.round(newDiv / newPrice * 10000) / 100 : (data.dividendYield ?? null);
+
+    if (newPrice == null && newDiv == null) {
+      showToast('Yahoo!ファイナンスから株価・配当情報を取得できませんでした', 'warning');
+      return;
+    }
+
+    const fmt = v => v == null ? '取得なし' : v;
+    const msg =
+      `${s.name}（${code}）の最新情報（Yahoo!ファイナンス ${data.fetchedAt || ''}時点）\n\n` +
+      `株価　　　　${fmt(oldPrice)}円 → ${fmt(newPrice)}円\n` +
+      `1株配当　　${fmt(oldDiv)}円 → ${fmt(newDiv)}円\n` +
+      `配当利回り　${fmt(oldYld)}% → ${fmt(newYld)}%\n\n` +
+      `この内容で上書き保存しますか？`;
+
+    if (!confirm(msg)) return;
+
+    if (newPrice != null) s.price = newPrice;
+    if (newDiv   != null) s.dividendAmount = newDiv;
+    if (newPrice != null && newDiv != null) {
+      s.dividendYield = Math.round(newDiv / newPrice * 10000) / 100;
+    } else if (newYld != null) {
+      s.dividendYield = newYld;
+    }
+    s.verifiedAt     = new Date().toISOString();
+    s.verifiedSource = 'yahoo-jp';
+
+    ST.save();
+    renderAll();
+    showToast(`✅ ${s.name}の情報を更新しました（「💾 保存」でGitHubに送信してください）`, 'success');
+  } catch (e) {
+    showToast(`調査に失敗しました: ${e.message}`, 'danger');
+  } finally {
+    if (btn && document.body.contains(btn)) { btn.disabled = false; btn.innerHTML = origHtml; }
+  }
 }
 
 // 銘柄コード → 保有口座一覧（未保有なら空配列）
@@ -996,6 +1071,15 @@ function processStocksXlsx(arrayBuffer, filename, silent) {
         const _exist = ST.stocks.find(s => s.code === obj.code);
         if (_exist && isJapanese(_exist.name) && !isJapanese(String(obj.name||''))) {
           obj.name = _exist.name;
+        }
+        // ディープ調査で手動検証済みの株価・配当は自動読み込みで上書きしない
+        // （再調査ボタンを押すか、手動でメモ等を編集するまで保持される）
+        if (_exist && _exist.verifiedAt) {
+          obj.price          = _exist.price;
+          obj.dividendAmount = _exist.dividendAmount;
+          obj.dividendYield  = _exist.dividendYield;
+          obj.verifiedAt     = _exist.verifiedAt;
+          obj.verifiedSource = _exist.verifiedSource;
         }
         return obj;
       })
