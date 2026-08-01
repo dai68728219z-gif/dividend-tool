@@ -861,7 +861,7 @@ function extLinksHtml(code) {
   const vLabel   = verified ? new Date(verified).toLocaleDateString('ja-JP', {month:'numeric', day:'numeric'}) : '';
   const dcTitle  = verified
     ? `最終ディープ調査: ${new Date(verified).toLocaleString('ja-JP')}（クリックで再調査・上書き）`
-    : 'ディープ調査：Yahoo!ファイナンスで株価・配当を確認し上書き保存（PC版のみ）';
+    : 'ディープ調査：yfinanceで株価・配当を再取得し確認の上で上書き保存（PC版のみ）';
   return `<div class="ext-links">
     <a href="${y}"  target="_blank" rel="noopener" title="Yahoo!ファイナンス">Y!</a>
     <a href="${ir}" target="_blank" rel="noopener" title="IRBANK">IR</a>
@@ -871,9 +871,10 @@ function extLinksHtml(code) {
   </div>`;
 }
 
-// ── ディープ調査（個別銘柄の株価・配当をYahoo!ファイナンスで確認し上書き保存）──
-// PC版（start_tool.py 経由 / IS_LOCAL）でのみ動作。
-// スマホ版はブラウザのCORS制限でYahoo!ファイナンスへ直接アクセスできないため非対応。
+// ── ディープ調査（個別銘柄の株価・配当をyfinanceで確認し上書き保存）──
+// PC版（start_tool.py 経由 / IS_LOCAL）でのみ動作。「今日の株価を取得」と同じ
+// yfinanceを使用し、配当の年換算はjapan_stocks_fetcher.pyと同じ検証済みロジックで行う。
+// スマホ版はブラウザのCORS制限でyfinanceサーバーへ直接アクセスできないため非対応。
 async function deepCheckStock(code, btn) {
   if (!IS_LOCAL) {
     showToast('この機能はPC版（start_tool.py 起動時）でのみ利用できます', 'warning');
@@ -886,7 +887,8 @@ async function deepCheckStock(code, btn) {
   if (btn) { btn.disabled = true; btn.innerHTML = '⏳'; }
 
   try {
-    const res  = await fetch(`/api/deep-check?code=${code}`);
+    const anchor = s.dividendAmount ? `&anchor=${s.dividendAmount}` : '';
+    const res  = await fetch(`/api/deep-check?code=${code}${anchor}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
 
@@ -899,19 +901,18 @@ async function deepCheckStock(code, btn) {
     const newYld   = (newPrice && newDiv) ? Math.round(newDiv / newPrice * 10000) / 100 : (data.dividendYield ?? null);
 
     if (newPrice == null && newDiv == null) {
-      showToast('Yahoo!ファイナンスから株価・配当情報を取得できませんでした', 'warning');
+      showToast('株価・配当情報を取得できませんでした', 'warning');
       return;
     }
 
     const fmt = v => v == null ? '取得なし' : v;
-    const debugNote = (data.debug && data.debug.length)
-      ? `\n\n※一部未取得：\n${data.debug.join('\n')}` : '';
+    const noteLine = data.note ? `\n\n⚠️ ${data.note}` : '';
     const msg =
-      `${s.name}（${code}）の最新情報（Yahoo!ファイナンス ${data.fetchedAt || ''}時点）\n\n` +
+      `${s.name}（${code}）の最新情報（yfinance ${data.fetchedAt || ''}時点）\n\n` +
       `株価　　　　${fmt(oldPrice)}円 → ${fmt(newPrice)}円\n` +
       `1株配当　　${fmt(oldDiv)}円 → ${fmt(newDiv)}円\n` +
       `配当利回り　${fmt(oldYld)}% → ${fmt(newYld)}%` +
-      debugNote +
+      noteLine +
       `\n\nこの内容で上書き保存しますか？`;
 
     if (!confirm(msg)) return;
@@ -924,7 +925,7 @@ async function deepCheckStock(code, btn) {
       s.dividendYield = newYld;
     }
     s.verifiedAt     = new Date().toISOString();
-    s.verifiedSource = 'yahoo-jp';
+    s.verifiedSource = 'yfinance';
 
     ST.save();
     renderAll();
