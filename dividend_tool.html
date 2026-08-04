@@ -323,7 +323,6 @@ th.has-filter .fd-icon { opacity:1; }
               <th class="sortable" data-sort="port" data-col="name">銘柄名</th>
               <th>情報</th>
               <th class="sortable" data-sort="port" data-col="sector">業種</th>
-              <th class="sortable" data-sort="port" data-col="category">分類</th>
               <th class="sortable text-end" data-sort="port" data-col="shares">保有株数</th>
               <th class="sortable text-end" data-sort="port" data-col="acqPrice">取得単価</th>
               <th class="sortable text-end" data-sort="port" data-col="price">現在株価</th>
@@ -1892,7 +1891,6 @@ function renderPortfolio() {
       case 'code':     return row.p.code     || '';
       case 'name':     return row.s?.name    || '';
       case 'sector':   return row.s?.sector  || '';
-      case 'category': return CAT_SHORT[getCategory(row.p.code)] || '';
       case 'shares':   return row.sh;
       case 'acqPrice': return row.acq;
       case 'price':    return row.price;
@@ -1913,7 +1911,6 @@ function renderPortfolio() {
       case 'code':    return dir * a.p.code.localeCompare(b.p.code);
       case 'name':    return dir * (a.s?.name||'').localeCompare(b.s?.name||'');
       case 'sector':  return dir * (a.s?.sector||'').localeCompare(b.s?.sector||'');
-      case 'category':return dir * getCategory(a.p.code).localeCompare(getCategory(b.p.code));
       case 'shares':  return dir * (a.sh - b.sh);
       case 'acqPrice':return dir * (a.acq - b.acq);
       case 'price':   return dir * (a.price - b.price);
@@ -1935,12 +1932,6 @@ function renderPortfolio() {
       <td>${s?.name||p.code}</td>
       <td>${extLinksHtml(p.code)}</td>
       <td><small class="text-muted">${s?.sector||'-'}</small></td>
-      <td>
-        <select class="form-select form-select-sm py-0" style="min-width:150px;font-size:.72rem"
-                onchange="updateCategory('${p.code}',this.value);renderPortfolio()">
-          ${catSelectHtml(p.code)}
-        </select>
-      </td>
       <td class="text-end">${fN(sh)}</td>
       <td class="text-end">${fN(acq,2)}</td>
       <td class="text-end">${price?fN(price):'-'}</td>
