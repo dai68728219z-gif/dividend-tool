@@ -595,9 +595,9 @@ th.has-filter .fd-icon { opacity:1; }
           <label class="form-label fw-bold">口座</label>
           <select class="form-select" id="mAccount">
             <option value="">—</option>
-            <option value="大輔NISA口座">大輔NISA口座</option>
-            <option value="大輔特定口座">大輔特定口座</option>
-            <option value="美沙紀NISA口座">美沙紀NISA口座</option>
+            <option value="大輔NISA">大輔NISA</option>
+            <option value="大輔特定">大輔特定</option>
+            <option value="美沙紀NISA">美沙紀NISA</option>
             <option value="その他">その他</option>
           </select>
         </div>
@@ -770,6 +770,8 @@ const ST = {
           if (port.rank && !this.ranks[port.code]) this.ranks[port.code] = port.rank;
           // 旧 portfolio.comment を全銘柄メモ ST.comments に移行
           if (port.comment && !(port.code in this.comments)) this.comments[port.code] = port.comment;
+          // 口座名の表記ゆれ（「大輔NISA口座」等）を自動取得の表記に統一
+          if (port.account) port.account = normalizeAccount(port.account);
         });
       }
     } catch(e) {}
@@ -945,6 +947,16 @@ async function deepCheckStock(code, btn) {
 // 銘柄コード → 保有口座一覧（未保有なら空配列）
 function buyAccounts(code) {
   return [...new Set(ST.portfolio.filter(p => p.code === code && p.account).map(p => p.account))];
+}
+
+// 口座名の表記ゆれを統一する（自動取得＝「大輔NISA」等は「口座」を含まない表記のため、
+// 手動入力や過去データの「大輔NISA口座」等をこれに合わせて統一し、
+// ダッシュボードの口座別サマリーで同一口座が別々に表示されるのを防ぐ）
+function normalizeAccount(a) {
+  if (!a) return a;
+  const s = String(a).trim();
+  if (s.length > 2 && s.endsWith('口座')) return s.slice(0, -2);
+  return s;
 }
 
 // 口座名 → CSSクラス
@@ -1182,7 +1194,7 @@ function processPortfolioXlsx(arrayBuffer, filename, silent) {
       let   yldVal   = toNum(row[COL.yld]);
       const sec      = String(row[COL.sec]  ?? '').trim();
       const name     = String(row[COL.name] ?? '').trim();
-      const acct     = COL.acct >= 0 ? String(row[COL.acct] ?? '').trim() : '';
+      const acct     = COL.acct >= 0 ? normalizeAccount(String(row[COL.acct] ?? '').trim()) : '';
 
       if (divAmt > 0 && price > 0) {
         yldVal = Math.round(divAmt / price * 10000) / 100;
@@ -1458,7 +1470,7 @@ function renderDash() {
     acctMap[acct].book  += acq * sh;
     acctMap[acct].annDiv += (+s?.dividendAmount||0) * sh;
   }
-  const ORDER = ['大輔NISA口座','大輔特定口座','美沙紀NISA口座'];
+  const ORDER = ['大輔NISA','大輔特定','美沙紀NISA'];
   const acctKeys = [...ORDER.filter(k=>acctMap[k]), ...Object.keys(acctMap).filter(k=>!ORDER.includes(k))];
   document.getElementById('acctSummaryBody').innerHTML = acctKeys.length === 0
     ? '<tr><td colspan="8" class="text-muted text-center">ポートフォリオ未設定</td></tr>'
@@ -2188,7 +2200,10 @@ function importAll(input) {
       if (d.version === 2) {
         if (!confirm(`銘柄${d.stocks?.length||0}件・ポートフォリオ${d.portfolio?.length||0}件・ランク${Object.keys(d.ranks||{}).length}件を読み込みます。`)) return;
         if (d.stocks?.length)    ST.stocks    = d.stocks;
-        if (d.portfolio?.length) ST.portfolio = d.portfolio;
+        if (d.portfolio?.length) {
+          ST.portfolio = d.portfolio;
+          ST.portfolio.forEach(p => { if (p.account) p.account = normalizeAccount(p.account); });
+        }
         if (d.ranks)             ST.ranks      = {...ST.ranks, ...d.ranks};
         if (d.paused)            ST.paused     = {...ST.paused, ...d.paused};
         if (d.categories)        ST.categories = {...ST.categories, ...d.categories};
@@ -2260,7 +2275,7 @@ document.getElementById('btnSave').addEventListener('click', () => {
 
   const item = {
     code,
-    account:      document.getElementById('mAccount').value,
+    account:      normalizeAccount(document.getElementById('mAccount').value),
     shares:       document.getElementById('mShares').value,
     acqPrice:     document.getElementById('mAcqPrice').value,
     rank:         document.querySelector('input[name=mRank]:checked')?.value||'',
@@ -2500,6 +2515,7 @@ const SYNC = {
         }
         if (Array.isArray(remote.portfolio) && remote.portfolio.length) {
           ST.portfolio = remote.portfolio; dataChanged = true;
+          ST.portfolio.forEach(p => { if (p.account) p.account = normalizeAccount(p.account); });
           localStorage.setItem('div_portfolio', JSON.stringify(ST.portfolio));
         }
         if (dataChanged) {
