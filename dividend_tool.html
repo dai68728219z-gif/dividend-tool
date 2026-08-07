@@ -604,12 +604,18 @@ th.has-filter .fd-icon { opacity:1; }
         <div class="row g-2 mb-3">
           <div class="col">
             <label class="form-label fw-bold">保有株数</label>
-            <input type="number" class="form-control" id="mShares" placeholder="100" min="0">
+            <input type="number" class="form-control" id="mShares" placeholder="100" min="0" step="0.0001">
           </div>
           <div class="col">
             <label class="form-label fw-bold">取得単価（円）</label>
             <input type="number" class="form-control" id="mAcqPrice" placeholder="2500" min="0" step="0.01">
           </div>
+        </div>
+        <div class="mb-3 form-check">
+          <input type="checkbox" class="form-check-input" id="mManualShares">
+          <label class="form-check-label small" for="mManualShares">
+            株数を自動更新で上書きしない（DRIP再投資等で毎月変動する海外ETF向け・手動入力を保持）
+          </label>
         </div>
         <div class="mb-3">
           <label class="form-label fw-bold">評価ランク</label>
@@ -1932,7 +1938,7 @@ function renderPortfolio() {
       <td>${s?.name||p.code}</td>
       <td>${extLinksHtml(p.code)}</td>
       <td><small class="text-muted">${s?.sector||'-'}</small></td>
-      <td class="text-end">${fN(sh)}</td>
+      <td class="text-end">${fN(sh)}${p.manualShares?' <span title="株数を自動更新で上書きしない設定です" style="cursor:help">🔒</span>':''}</td>
       <td class="text-end">${fN(acq,2)}</td>
       <td class="text-end">${price?fN(price):'-'}</td>
       <td class="text-end">${eval_>0?'¥'+fN(Math.round(eval_)):'-'}</td>
@@ -2218,6 +2224,7 @@ function openAdd(code='') {
   document.getElementById('mAcqPrice').value = '';
   document.getElementById('mComment').value = '';
   document.getElementById('mAccount').value = '';
+  document.getElementById('mManualShares').checked = false;
   document.querySelectorAll('input[name=mRank]').forEach(r=>r.checked=false);
   if (code) document.getElementById('mCode').dispatchEvent(new Event('input'));
   modal().show();
@@ -2232,6 +2239,7 @@ function openEdit(idx) {
   document.getElementById('mAcqPrice').value = p.acqPrice;
   document.getElementById('mComment').value = p.comment||'';
   document.getElementById('mAccount').value = p.account||'';
+  document.getElementById('mManualShares').checked = !!p.manualShares;
   document.querySelectorAll('input[name=mRank]').forEach(r=>r.checked=r.value===getStockRank(p.code));
   document.getElementById('mCode').dispatchEvent(new Event('input'));
   modal().show();
@@ -2252,11 +2260,12 @@ document.getElementById('btnSave').addEventListener('click', () => {
 
   const item = {
     code,
-    account:  document.getElementById('mAccount').value,
-    shares:   document.getElementById('mShares').value,
-    acqPrice: document.getElementById('mAcqPrice').value,
-    rank:     document.querySelector('input[name=mRank]:checked')?.value||'',
-    comment:  document.getElementById('mComment').value,
+    account:      document.getElementById('mAccount').value,
+    shares:       document.getElementById('mShares').value,
+    acqPrice:     document.getElementById('mAcqPrice').value,
+    rank:         document.querySelector('input[name=mRank]:checked')?.value||'',
+    comment:      document.getElementById('mComment').value,
+    manualShares: document.getElementById('mManualShares').checked,
   };
 
   if (editIdx >= 0) {
