@@ -159,7 +159,7 @@ th.has-filter .fd-icon { opacity:1; }
         </div>
         <div class="col-lg-4">
           <div class="card p-3">
-            <h6 class="fw-bold mb-2">🏭 業種別保有比率（評価額）</h6>
+            <h6 class="fw-bold mb-2">🏭 業種別配当金比率</h6>
             <div style="position:relative;height:240px;">
               <canvas id="sectorChart"></canvas>
               <div id="sectorEmpty" class="text-center text-muted small pt-5">ポートフォリオ未設定</div>
@@ -186,7 +186,7 @@ th.has-filter .fd-icon { opacity:1; }
         <h6 class="fw-bold mb-2">📊 業種別サマリー（保有）</h6>
         <div class="table-responsive">
           <table class="table table-sm table-bordered mb-0">
-            <thead class="table-dark"><tr><th>業種</th><th>銘柄数</th><th class="text-end">評価額</th><th class="text-end">比率</th><th class="text-end">平均利回り</th><th class="text-end">過不足</th></tr></thead>
+            <thead class="table-dark"><tr><th>業種</th><th>銘柄数</th><th class="text-end">評価額</th><th class="text-end">配当金合計</th><th class="text-end">比率</th><th class="text-end">平均利回り</th><th class="text-end">過不足</th></tr></thead>
             <tbody id="sectorSummaryBody"></tbody>
           </table>
         </div>
@@ -323,6 +323,7 @@ th.has-filter .fd-icon { opacity:1; }
               <th class="sortable" data-sort="port" data-col="name">銘柄名</th>
               <th>情報</th>
               <th class="sortable" data-sort="port" data-col="sector">業種</th>
+              <th class="text-end" title="ポートフォリオ全体の年間配当金合計に対する、この銘柄の業種の配当金比率">業種配当比率</th>
               <th class="sortable text-end" data-sort="port" data-col="shares">保有株数</th>
               <th class="sortable text-end" data-sort="port" data-col="acqPrice">取得単価</th>
               <th class="sortable text-end" data-sort="port" data-col="price">現在株価</th>
@@ -1401,6 +1402,7 @@ function renderDash() {
   document.getElementById('lastUpdated').textContent = `登録済: ${ST.stocks.length.toLocaleString()}銘柄`;
 
   const { vals, total } = sectorWeights();
+  const { vals: divVals, total: divTotal } = sectorDivWeights();
   document.getElementById('d-portVal').textContent = total > 0 ? '¥'+fN(total) : '-';
 
   // 年間配当合計
@@ -1437,18 +1439,19 @@ function renderDash() {
         <td><small>${accts.length ? accts.map(a=>acctBadge(a)||a).join('<br>') : '<span class="text-muted">-</span>'}</small></td>
       </tr>`;}).join('')}</tbody></table>`;
 
-  // ドーナツチャート（業種別）
+  // ドーナツチャート（業種別配当金比率）
   const labels = Object.keys(vals);
-  document.getElementById('sectorEmpty').style.display = labels.length ? 'none' : 'block';
+  const chartLabels = Object.keys(divVals).filter(l => divVals[l] > 0);
+  document.getElementById('sectorEmpty').style.display = chartLabels.length ? 'none' : 'block';
   if (chartInst) { chartInst.destroy(); chartInst = null; }
-  if (labels.length) {
+  if (chartLabels.length) {
     chartInst = new Chart(document.getElementById('sectorChart'), {
       type: 'doughnut',
       data: {
-        labels,
+        labels: chartLabels,
         datasets: [{
-          data: labels.map(l=>vals[l]),
-          backgroundColor: labels.map((_,i)=>`hsl(${Math.round(i*360/labels.length)},60%,55%)`),
+          data: chartLabels.map(l=>divVals[l]),
+          backgroundColor: chartLabels.map((_,i)=>`hsl(${Math.round(i*360/chartLabels.length)},60%,55%)`),
           borderWidth: 1,
         }]
       },
@@ -1491,13 +1494,14 @@ function renderDash() {
         </tr>`;
       }).join('');
 
-  // 業種別サマリー（業種名の左に評価進捗の色ドットを表示）
+  // 業種別サマリー（業種名の左に評価進捗の色ドットを表示。比率・過不足は配当金合計ベース）
   const targetW = labels.length ? 1/labels.length : 0;
   const progStats = sectorProgressStats().bySec;
   document.getElementById('sectorSummaryBody').innerHTML = labels.length === 0
-    ? '<tr><td colspan="6" class="text-muted text-center">ポートフォリオ未設定</td></tr>'
-    : labels.sort((a,b)=>vals[b]-vals[a]).map(sec=>{
-        const w = vals[sec]/total;
+    ? '<tr><td colspan="7" class="text-muted text-center">ポートフォリオ未設定</td></tr>'
+    : labels.sort((a,b)=>(divVals[b]||0)-(divVals[a]||0)).map(sec=>{
+        const divAmt = divVals[sec] || 0;
+        const w = divTotal > 0 ? divAmt / divTotal : 0;
         const diff = w - targetW;
         const diffStr = (diff>=0?'+':'') + (diff*100).toFixed(1)+'%';
         const diffCls = diff>0.03?'text-danger':diff<-0.03?'text-success':'text-muted';
@@ -1515,7 +1519,8 @@ function renderDash() {
           : `<small class="${pct===100?'text-success fw-bold':'text-muted'} ms-1">${pct}%</small>`;
         return `<tr>
           <td>${dot}${sec}${pctTxt}</td><td>${portItems.length}</td>
-          <td class="text-end">¥${fN(Math.round(vals[sec]))}</td>
+          <td class="text-end">¥${fN(Math.round(vals[sec]||0))}</td>
+          <td class="text-end text-warning">¥${fN(Math.round(divAmt))}</td>
           <td class="text-end">${(w*100).toFixed(1)}%</td>
           <td class="text-end text-success">${avgY.toFixed(2)}%</td>
           <td class="text-end ${diffCls} fw-bold">${diffStr}</td>
@@ -1888,6 +1893,9 @@ function renderPortfolio() {
     return;
   }
 
+  // 業種別配当比率（ポートフォリオ全体の年間配当金合計に対する各業種の比率）
+  const { vals: sectorDiv, total: sectorDivTotal } = sectorDivWeights();
+
   // 計算値を付与してソート
   const rows = ST.portfolio.map((p, origIdx) => {
     const s      = ST.stocks.find(s=>s.code===p.code);
@@ -1950,6 +1958,7 @@ function renderPortfolio() {
       <td>${s?.name||p.code}</td>
       <td>${extLinksHtml(p.code)}</td>
       <td><small class="text-muted">${s?.sector||'-'}</small></td>
+      <td class="text-end"><small class="text-muted">${sectorDivTotal>0?((sectorDiv[s?.sector||'不明']||0)/sectorDivTotal*100).toFixed(1)+'%':'-'}</small></td>
       <td class="text-end">${fN(sh)}${p.manualShares?' <span title="株数を自動更新で上書きしない設定です" style="cursor:help">🔒</span>':''}</td>
       <td class="text-end">${fN(acq,2)}</td>
       <td class="text-end">${price?fN(price):'-'}</td>
