@@ -683,7 +683,7 @@ th.has-filter .fd-icon { opacity:1; }
 <script>
 // push_html.py がプッシュのたびに自動で書き換える（手動編集不要）。
 // スマホのホーム画面ショートカット等が古いキャッシュを開き続けてしまう問題を検知するために使う。
-const APP_VERSION = 32;
+const APP_VERSION = 33;
 // ════════════════════════════════════════
 //  STATE
 // ════════════════════════════════════════
@@ -2887,29 +2887,51 @@ if (SYNC._dirty && SYNC.canPush()) {
   await autoLoadPortfolio(); // portfolio_report_*.xlsx（毎回）
 })();
 
-// ── バージョンチェック ──────────────────────
+// ── バージョンチェック（自動リダイレクト・GitHub Pages版のみ）──────────────
 // スマホのホーム画面ショートカット等が古いURL（?v=旧番号）のまま固定され、
-// ブラウザキャッシュから古いJSが読み込まれ続ける問題を検知して通知する。
+// ブラウザキャッシュから古いJavaScriptが読み込まれ続ける問題への対策。
 // version.json は push_html.py がHTML本体と一緒に毎回更新・プッシュする軽量ファイル。
+// タップ操作なしで自動的に最新版へ飛ばす（ワンクリック起動を維持するため）。
+// ただしGitHub Pagesの反映には数分のタイムラグがあるため、
+// リダイレクト直後にまだ古いままの場合はループさせず、バナー表示に切り替える。
+// ※PC版（start_tool.py経由のlocalhost）はローカルファイルを直接キャッシュなしで
+//   配信しており、常に最新な上にversion.json比較の対象にもならないため対象外。
+function showUpdateBanner(latest, current) {
+  if (document.getElementById('updateBanner')) return;
+  const b = document.createElement('div');
+  b.id = 'updateBanner';
+  b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#0d6efd;'
+    + 'color:#fff;text-align:center;padding:10px;cursor:pointer;font-weight:bold;font-size:14px;';
+  b.textContent = `🔄 v${latest}への反映待ちです（今はv${current}）。タップして再試行`;
+  b.onclick = () => {
+    sessionStorage.removeItem('div_redirected_to_v');
+    const u = new URL(location.href);
+    u.searchParams.set('v', latest);
+    u.searchParams.set('_r', Date.now()); // ブラウザキャッシュを確実に回避
+    location.replace(u.toString());
+  };
+  document.body.prepend(b);
+}
 (async () => {
+  if (IS_LOCAL) return; // PC版（localhost）はチェック不要
   try {
     const url = `https://raw.githubusercontent.com/${SYNC.REPO_OWNER}/${SYNC.REPO_NAME}/main/version.json?ts=${Date.now()}`;
     const res = await fetch(url);
     if (!res.ok) return;
     const { latest } = await res.json();
-    if (latest && latest > APP_VERSION) {
-      const b = document.createElement('div');
-      b.id = 'updateBanner';
-      b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#0d6efd;'
-        + 'color:#fff;text-align:center;padding:10px;cursor:pointer;font-weight:bold;font-size:14px;';
-      b.textContent = `🔄 新しいバージョン（v${latest}）があります。今のv${APP_VERSION}は古い可能性があります。タップして更新`;
-      b.onclick = () => {
-        const u = new URL(location.href);
-        u.searchParams.set('v', latest);
-        location.href = u.toString();
-      };
-      document.body.prepend(b);
+    if (!latest || latest <= APP_VERSION) return;
+
+    // 直前に同じバージョンへ自動リダイレクトを試みたのにまだ古いままなら、
+    // GitHub Pages側の反映待ちと判断してループさせず、手動リトライのバナーを出す。
+    const alreadyTried = sessionStorage.getItem('div_redirected_to_v');
+    if (String(latest) === alreadyTried) {
+      showUpdateBanner(latest, APP_VERSION);
+      return;
     }
+    sessionStorage.setItem('div_redirected_to_v', String(latest));
+    const u = new URL(location.href);
+    u.searchParams.set('v', latest);
+    location.replace(u.toString());
   } catch(e) { /* 取得できなくても無視（オフライン等） */ }
 })();
 </script>
