@@ -1254,14 +1254,18 @@ function processPortfolioXlsx(arrayBuffer, filename, silent) {
 }
 
 // ── 起動時に最新ポートフォリオを自動読み込み（localhost のみ）──
+// 同じファイルが既にロード済みの場合はスキップ（毎回「未保存の変更あり」になるのを防ぐ）
 async function autoLoadPortfolio() {
   if (!IS_LOCAL) return;
   try {
     const res = await fetch('/api/latest-portfolio');
     if (!res.ok) return;
     const filename = res.headers.get('X-Filename') || 'portfolio_report.xlsx';
+    const lastLoaded = localStorage.getItem('div_last_portfolio_file') || '';
+    if (filename === lastLoaded && ST.portfolio.length > 0) return; // スキップ（未変更なら再保存しない）
     const buf = await res.arrayBuffer();
     processPortfolioXlsx(buf, filename, true);
+    localStorage.setItem('div_last_portfolio_file', filename);
   } catch(e) {
     // サーバー未起動などは無視
   }
