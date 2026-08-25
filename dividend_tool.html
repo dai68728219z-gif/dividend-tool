@@ -681,6 +681,9 @@ th.has-filter .fd-icon { opacity:1; }
 </div>
 
 <script>
+// push_html.py がプッシュのたびに自動で書き換える（手動編集不要）。
+// スマホのホーム画面ショートカット等が古いキャッシュを開き続けてしまう問題を検知するために使う。
+const APP_VERSION = 32;
 // ════════════════════════════════════════
 //  STATE
 // ════════════════════════════════════════
@@ -2882,6 +2885,32 @@ if (SYNC._dirty && SYNC.canPush()) {
   }
   await autoLoadStocks();    // japan_stocks_*.xlsx（新しいファイルがある時のみ）
   await autoLoadPortfolio(); // portfolio_report_*.xlsx（毎回）
+})();
+
+// ── バージョンチェック ──────────────────────
+// スマホのホーム画面ショートカット等が古いURL（?v=旧番号）のまま固定され、
+// ブラウザキャッシュから古いJSが読み込まれ続ける問題を検知して通知する。
+// version.json は push_html.py がHTML本体と一緒に毎回更新・プッシュする軽量ファイル。
+(async () => {
+  try {
+    const url = `https://raw.githubusercontent.com/${SYNC.REPO_OWNER}/${SYNC.REPO_NAME}/main/version.json?ts=${Date.now()}`;
+    const res = await fetch(url);
+    if (!res.ok) return;
+    const { latest } = await res.json();
+    if (latest && latest > APP_VERSION) {
+      const b = document.createElement('div');
+      b.id = 'updateBanner';
+      b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#0d6efd;'
+        + 'color:#fff;text-align:center;padding:10px;cursor:pointer;font-weight:bold;font-size:14px;';
+      b.textContent = `🔄 新しいバージョン（v${latest}）があります。今のv${APP_VERSION}は古い可能性があります。タップして更新`;
+      b.onclick = () => {
+        const u = new URL(location.href);
+        u.searchParams.set('v', latest);
+        location.href = u.toString();
+      };
+      document.body.prepend(b);
+    }
+  } catch(e) { /* 取得できなくても無視（オフライン等） */ }
 })();
 </script>
 </body>
