@@ -683,7 +683,7 @@ th.has-filter .fd-icon { opacity:1; }
 <script>
 // push_html.py がプッシュのたびに自動で書き換える（手動編集不要）。
 // スマホのホーム画面ショートカット等が古いキャッシュを開き続けてしまう問題を検知するために使う。
-const APP_VERSION = 33;
+const APP_VERSION = 34;
 // ════════════════════════════════════════
 //  STATE
 // ════════════════════════════════════════
@@ -2433,6 +2433,17 @@ const SYNC = {
     updateSaveButtonUI();
   },
 
+  // 直近でpush()した時刻。raw.githubusercontent.com はCDNキャッシュのため、
+  // push直後は「GitHub側がまだ古い内容を返す」ことがある。
+  // この直後にpull()が走ると、せっかく保存したランク等が古い内容で
+  // 上書き（＝見かけ上「元に戻る」）されてしまうため、push直後は
+  // 一定時間pull()でのランク等上書きを見送る（CDN反映待ち）。
+  _lastPushedAt: parseInt(localStorage.getItem('div_last_pushed_at') || '0', 10),
+  _PUSH_COOLDOWN_MS: 3 * 60 * 1000, // 3分
+  _recentlyPushed() {
+    return (Date.now() - this._lastPushedAt) < this._PUSH_COOLDOWN_MS;
+  },
+
   isReady() { return true; },         // pull は常に可能
   canPush()  { return !!this.token; }, // push はトークンが必要
 
@@ -2491,7 +2502,11 @@ const SYNC = {
       // ただし、「保存」ボタンでまだ送信していないローカル編集（_dirty）がある間は絶対に上書きしない。
       // 自動送信は行わないため、dirty中はここでは何もせず、ユーザーが保存ボタンを押すまで
       // ローカルの変更をそのまま保持する。
-      if (!this._dirty) {
+      //
+      // さらに、push()直後もスキップする（force指定時を除く）。raw.githubusercontent.com の
+      // CDN反映には数十秒〜数分のラグがあるため、送信直後にpull()すると反映前の古い内容を
+      // 取得してしまい、せっかく保存したランクが「元に戻った」ように見えてしまう。
+      if (!this._dirty && !(this._recentlyPushed() && !force)) {
         if (remote.ranks && Object.keys(remote.ranks).length) {
           const rj = JSON.stringify(remote.ranks);
           if (rj !== JSON.stringify(ST.ranks)) {
@@ -2587,6 +2602,8 @@ const SYNC = {
       }
       this._clearError();
       this._clearDirty();   // 送信確認できたのでpull()での上書きを解禁
+      this._lastPushedAt = Date.now();
+      localStorage.setItem('div_last_pushed_at', String(this._lastPushedAt));
       syncIndicator('ok');
       return true;
     } catch(e) {
