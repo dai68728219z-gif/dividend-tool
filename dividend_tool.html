@@ -186,7 +186,7 @@ th.has-filter .fd-icon { opacity:1; }
         <h6 class="fw-bold mb-2">📊 業種別サマリー（保有）</h6>
         <div class="table-responsive">
           <table class="table table-sm table-bordered mb-0">
-            <thead class="table-dark"><tr><th>業種</th><th>銘柄数</th><th class="text-end">評価額</th><th class="text-end">配当金合計</th><th class="text-end">比率</th><th class="text-end">平均利回り</th><th class="text-end">過不足</th></tr></thead>
+            <thead class="table-dark"><tr><th>業種</th><th class="text-center" title="その業種に追加購入したい候補銘柄が残っているか（手入力・クリックで切替）">追加候補</th><th>銘柄数</th><th class="text-end">評価額</th><th class="text-end">配当金合計</th><th class="text-end">比率</th><th class="text-end">平均利回り</th><th class="text-end">過不足</th></tr></thead>
             <tbody id="sectorSummaryBody"></tbody>
           </table>
         </div>
@@ -683,7 +683,7 @@ th.has-filter .fd-icon { opacity:1; }
 <script>
 // push_html.py がプッシュのたびに自動で書き換える（手動編集不要）。
 // スマホのホーム画面ショートカット等が古いキャッシュを開き続けてしまう問題を検知するために使う。
-const APP_VERSION = 34;
+const APP_VERSION = 35;
 // ════════════════════════════════════════
 //  STATE
 // ════════════════════════════════════════
@@ -733,6 +733,8 @@ const ST = {
   categories: {},
   // 全銘柄メモ {code: text} （入力がある銘柄のみ格納。ポートフォリオのメモと同一ソース）
   comments: {},
+  // 業種ごとの「追加購入候補の有無」手入力フラグ {業種名: 'yes'|'no'} （未設定=未確認）
+  sectorCand: {},
   save() {
     invalidateCaches();
     localStorage.setItem('div_stocks',    JSON.stringify(this.stocks));
@@ -741,6 +743,7 @@ const ST = {
     localStorage.setItem('div_paused',    JSON.stringify(this.paused));
     localStorage.setItem('div_categories',JSON.stringify(this.categories));
     localStorage.setItem('div_comments',  JSON.stringify(this.comments));
+    localStorage.setItem('div_sector_cand', JSON.stringify(this.sectorCand));
     localStorage.setItem('div_updated_at', new Date().toISOString());
     // GitHubへの送信は自動では行わない（意図しないタイミングでの送信・競合を避けるため）。
     // 「保存」ボタンを押した時にのみ SYNC.push() が呼ばれる。ここでは未保存フラグを立てるだけ。
@@ -758,6 +761,8 @@ const ST = {
       if (c) this.categories = JSON.parse(c);
       const m = localStorage.getItem('div_comments');
       if (m) this.comments = JSON.parse(m);
+      const sc = localStorage.getItem('div_sector_cand');
+      if (sc) this.sectorCand = JSON.parse(sc);
       if (s) {
         this.stocks = JSON.parse(s);
         // 旧データの利回り100倍エラーを修正
@@ -1505,7 +1510,7 @@ function renderDash() {
   const targetW = labels.length ? 1/labels.length : 0;
   const progStats = sectorProgressStats().bySec;
   document.getElementById('sectorSummaryBody').innerHTML = labels.length === 0
-    ? '<tr><td colspan="7" class="text-muted text-center">ポートフォリオ未設定</td></tr>'
+    ? '<tr><td colspan="8" class="text-muted text-center">ポートフォリオ未設定</td></tr>'
     : labels.sort((a,b)=>(divVals[b]||0)-(divVals[a]||0)).map(sec=>{
         const divAmt = divVals[sec] || 0;
         const w = divTotal > 0 ? divAmt / divTotal : 0;
@@ -1525,7 +1530,9 @@ function renderDash() {
         const pctTxt = pct === null ? ''
           : `<small class="${pct===100?'text-success fw-bold':'text-muted'} ms-1">${pct}%</small>`;
         return `<tr>
-          <td>${dot}${sec}${pctTxt}</td><td>${portItems.length}</td>
+          <td>${dot}${sec}${pctTxt}</td>
+          <td class="text-center">${candBtnHtml(sec)}</td>
+          <td>${portItems.length}</td>
           <td class="text-end">¥${fN(Math.round(vals[sec]||0))}</td>
           <td class="text-end text-warning">¥${fN(Math.round(divAmt))}</td>
           <td class="text-end">${(w*100).toFixed(1)}%</td>
@@ -1533,6 +1540,25 @@ function renderDash() {
           <td class="text-end ${diffCls} fw-bold">${diffStr}</td>
         </tr>`;
       }).join('');
+}
+
+// 業種別「追加購入候補の有無」ボタン（未確認→あり→なし→未確認…と切替）
+function candBtnHtml(sec) {
+  const v = ST.sectorCand[sec];
+  const [cls, txt] = v === 'yes' ? ['btn-success', '候補あり']
+                   : v === 'no'  ? ['btn-secondary', '候補なし']
+                   :               ['btn-outline-secondary', '未確認'];
+  const key = encodeURIComponent(sec);
+  return `<button class="btn btn-sm ${cls} py-0 px-2" style="font-size:.75rem;white-space:nowrap"
+            onclick="toggleSectorCand(decodeURIComponent('${key}'))">${txt}</button>`;
+}
+function toggleSectorCand(sec) {
+  const v = ST.sectorCand[sec];
+  if (!v) ST.sectorCand[sec] = 'yes';
+  else if (v === 'yes') ST.sectorCand[sec] = 'no';
+  else delete ST.sectorCand[sec];
+  ST.save();
+  renderDash();
 }
 
 // ════════════════════════════════════════
@@ -2196,6 +2222,7 @@ function exportAll() {
     paused:    ST.paused,
     categories: ST.categories,
     comments:  ST.comments,
+    sectorCand: ST.sectorCand,
   };
   const blob = new Blob([JSON.stringify(payload)], {type:'application/json'});
   const url  = URL.createObjectURL(blob);
@@ -2224,6 +2251,7 @@ function importAll(input) {
         if (d.paused)            ST.paused     = {...ST.paused, ...d.paused};
         if (d.categories)        ST.categories = {...ST.categories, ...d.categories};
         if (d.comments)          ST.comments   = {...ST.comments, ...d.comments};
+        if (d.sectorCand)        ST.sectorCand = {...ST.sectorCand, ...d.sectorCand};
       } else {
         // 旧形式（ランクのみ）
         const count = Object.keys(d).length;
@@ -2481,6 +2509,7 @@ const SYNC = {
       paused:    ST.paused,
       categories: ST.categories,
       comments:  ST.comments,
+      sectorCand: ST.sectorCand,
       stocks,
     });
   },
@@ -2533,6 +2562,13 @@ const SYNC = {
           if (mj !== JSON.stringify(ST.comments)) {
             ST.comments = remote.comments; changed = true;
             localStorage.setItem('div_comments', mj);
+          }
+        }
+        if (remote.sectorCand) {
+          const sj = JSON.stringify(remote.sectorCand);
+          if (sj !== JSON.stringify(ST.sectorCand)) {
+            ST.sectorCand = remote.sectorCand; changed = true;
+            localStorage.setItem('div_sector_cand', sj);
           }
         }
       }
